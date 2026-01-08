@@ -1,0 +1,44 @@
+diff --git a/fs/exec.c b/fs/exec.c
+index 000000000000..sukisu000001 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1720,6 +1720,25 @@ static int __do_execve_file(int fd, struct filename *filename,
+        struct files_struct *displaced;
+        int retval;
+
++#ifdef CONFIG_KSU
++       extern bool ksu_execveat_hook;
++       extern bool ksu_boot_completed;
++
++       extern int ksu_handle_execveat(int *fd,
++               struct filename **filename_ptr,
++               void *argv, void *envp, int *flags);
++
++       extern int ksu_handle_execveat_sucompat(int *fd,
++               struct filename **filename_ptr,
++               void *argv, void *envp, int *flags);
++
++#ifdef CONFIG_KSU_SUSFS
++       if (unlikely(susfs_is_current_proc_umounted())) {
++               goto orig_flow;
++       }
++#endif
++
++       /*
++        * sukisu builtin exec logic:
++        *  - bootstrap during boot
++        *  - su only after boot
++        *  - stop hook automatically
++        */
++       if (unlikely(ksu_execveat_hook || !ksu_boot_completed)) {
++               ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++       } else if (__ksu_is_allow_uid_for_current(current_uid().val)) {
++               ksu_handle_execveat_sucompat(&fd, &filename,
++                       &argv, &envp, &flags);
++       }
++
++orig_flow:
++#endif /* CONFIG_KSU */
++
+        if (IS_ERR(filename))
+                return PTR_ERR(filename);
