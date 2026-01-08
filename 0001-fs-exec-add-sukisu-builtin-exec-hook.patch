@@ -1,3 +1,13 @@
+diff --git a/fs/exec.c b/fs/exec.c
+index 000000000000..sukisu000001 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1720,6 +1720,25 @@ static int __do_execve_file(int fd, struct filename *filename,
+        struct files_struct *displaced;
+        int retval;
+
++#ifdef CONFIG_KSU
++       extern bool ksu_execveat_hook;
 +#ifdef CONFIG_KSU
 +extern bool ksu_execveat_hook;
 +extern bool ksu_boot_completed;
@@ -29,3 +39,6 @@
 +
 +orig_flow:
 +#endif /* CONFIG_KSU */
++
+        if (IS_ERR(filename))
+                return PTR_ERR(filename);
