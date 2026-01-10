@@ -1,0 +1,34 @@
+diff --git a/security/selinux/hooks.c b/security/selinux/hooks.c
+--- a/security/selinux/hooks.c
++++ b/security/selinux/hooks.c
+@@ -82,6 +82,12 @@
+ #include "avc_ss.h"
+ #include "objsec.h"
+
++#ifdef CONFIG_KSU
++/* KernelSU manual hook */
++extern bool ksu_is_enabled(void);
++extern bool ksu_allow_current(void);
++#endif
++
+ /*
+  * Hook functions
+  */
+
+@@ -230,6 +236,14 @@ static int selinux_task_setpgid(struct task_struct *p, pid_t pgid)
+ {
++#ifdef CONFIG_KSU
++	if (ksu_is_enabled() && ksu_allow_current())
++		return 0;
++#endif
+ 	return task_has_perm(current, p, PROCESS__SETPGID);
+ }
+
+@@ -255,6 +269,14 @@ static int selinux_task_getpgid(struct task_struct *p)
+ {
++#ifdef CONFIG_KSU
++	if (ksu_is_enabled() && ksu_allow_current())
++		return 0;
++#endif
+ 	return task_has_perm(current, p, PROCESS__GETPGID);
+ }
