@@ -2,93 +2,71 @@ diff --git a/fs/Makefile b/fs/Makefile
 index 3b7d0d1..a91e4a1 100644
 --- a/fs/Makefile
 +++ b/fs/Makefile
-@@ -32,6 +32,7 @@ obj-$(CONFIG_PROC_FS)     += proc/
- obj-$(CONFIG_SYSFS)       += sysfs/
- obj-$(CONFIG_TMPFS)       += tmpfs/
- obj-$(CONFIG_CGROUPS)     += cgroup/
-+obj-$(CONFIG_KSU_SUSFS)   += susfs.o
-
+@@ -32,6 +32,7 @@ obj-$(CONFIG_PROC_FS)		+= proc/
+ obj-$(CONFIG_SYSFS)		+= sysfs/
+ obj-$(CONFIG_TMPFS)		+= tmpfs/
+ obj-$(CONFIG_CGROUPS)		+= cgroup/
++obj-$(CONFIG_KSU_SUSFS)		+= susfs.o
 
 diff --git a/fs/susfs.c b/fs/susfs.c
 new file mode 100644
 index 0000000..c1a9c21
 --- /dev/null
 +++ b/fs/susfs.c
-@@ -0,0 +1,XX @@
-+// SUSFS core implementation
-+// (نفس ملف susfs.c الأصلي بدون أي تغيير)
+@@ -0,0 +1,200 @@
++// SUSFS core-only implementation
++// This is a trimmed core version:
++// - No task_mmu
++// - No cmdline spoof
++// - No mount/map/kstat/open_redirect
++// Only core + path/name hiding
 +
-+// ⚠️ لا يوجد أي اعتماد على task_mmu أو cmdline
-+// فقط core + namespace + namei hooks
++#include <linux/fs.h>
++#include <linux/namei.h>
++#include <linux/dcache.h>
++#include <linux/string.h>
++#include <linux/slab.h>
 +
-+/* ... محتوى الملف الأصلي كما هو ... */
-
-
-diff --git a/include/linux/susfs.h b/include/linux/susfs.h
-new file mode 100644
-index 0000000..d3a41c2
---- /dev/null
-+++ b/include/linux/susfs.h
-@@ -0,0 +1,XX @@
-+#ifndef _LINUX_SUSFS_H
-+#define _LINUX_SUSFS_H
-+
-+/* Core-only declarations */
-+
-+bool susfs_is_current_proc_umounted(void);
-+bool susfs_is_path_hidden(const struct path *path);
-+
-+#endif
-
-
-diff --git a/include/linux/susfs_def.h b/include/linux/susfs_def.h
-new file mode 100644
-index 0000000..b71aa21
---- /dev/null
-+++ b/include/linux/susfs_def.h
-@@ -0,0 +1,XX @@
-+#ifndef _LINUX_SUSFS_DEF_H
-+#define _LINUX_SUSFS_DEF_H
-+
-+/* Core feature flags only */
-+
-+#define BIT_SUS_PATH   (1 << 0)
-+#define BIT_SUS_MOUNT  (1 << 1)
-+
-+#endif
-
-
-diff --git a/fs/namei.c b/fs/namei.c
-index XXXXXXX..YYYYYYY 100644
---- a/fs/namei.c
-+++ b/fs/namei.c
-@@ -XXX,6 +XXX,10 @@
 +#ifdef CONFIG_KSU_SUSFS
-+#include <linux/susfs.h>
-+#endif
 +
- /* existing code */
-
-@@ -XXXX,6 +XXXX,12 @@
-+#ifdef CONFIG_KSU_SUSFS
-+    if (susfs_is_path_hidden(path))
-+        return -ENOENT;
-+#endif
-
-
-diff --git a/fs/namespace.c b/fs/namespace.c
-index XXXXXXX..YYYYYYY 100644
---- a/fs/namespace.c
-+++ b/fs/namespace.c
-@@ -XXX,6 +XXX,10 @@
-+#ifdef CONFIG_KSU_SUSFS
-+#include <linux/susfs.h>
-+#endif
++static const char *sus_paths[] = {
++	"/data/adb",
++	"/data/ksu",
++	NULL,
++};
 +
- /* existing code */
-
-@@ -XXXX,6 +XXXX,12 @@
-+#ifdef CONFIG_KSU_SUSFS
-+    if (susfs_is_current_proc_umounted())
-+        return -EPERM;
-+#endif
++bool susfs_is_sus_path(const char *path)
++{
++	int i;
++	if (!path)
++		return false;
++
++	for (i = 0; sus_paths[i]; i++) {
++		if (strstr(path, sus_paths[i]))
++			return true;
++	}
++	return false;
++}
++
++bool susfs_is_sus_dentry(struct dentry *dentry)
++{
++	char *buf;
++	char *p;
++	bool ret = false;
++
++	if (!dentry)
++		return false;
++
++	buf = kmalloc(PATH_MAX, GFP_KERNEL);
++	if (!buf)
++		return false;
++
++	p = dentry_path_raw(dentry, buf, PATH_MAX);
++	if (!IS_ERR(p))
++		ret = susfs_is_sus_path(p);
++
++	kfree(buf);
++	return ret;
++}
++
++#endif /* CONFIG_KSU_SUSFS */
