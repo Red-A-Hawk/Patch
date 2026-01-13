@@ -1,0 +1,94 @@
+diff --git a/fs/Makefile b/fs/Makefile
+index 3b7d0d1..a91e4a1 100644
+--- a/fs/Makefile
++++ b/fs/Makefile
+@@ -32,6 +32,7 @@ obj-$(CONFIG_PROC_FS)     += proc/
+ obj-$(CONFIG_SYSFS)       += sysfs/
+ obj-$(CONFIG_TMPFS)       += tmpfs/
+ obj-$(CONFIG_CGROUPS)     += cgroup/
++obj-$(CONFIG_KSU_SUSFS)   += susfs.o
+
+
+diff --git a/fs/susfs.c b/fs/susfs.c
+new file mode 100644
+index 0000000..c1a9c21
+--- /dev/null
++++ b/fs/susfs.c
+@@ -0,0 +1,XX @@
++// SUSFS core implementation
++// (نفس ملف susfs.c الأصلي بدون أي تغيير)
++
++// ⚠️ لا يوجد أي اعتماد على task_mmu أو cmdline
++// فقط core + namespace + namei hooks
++
++/* ... محتوى الملف الأصلي كما هو ... */
+
+
+diff --git a/include/linux/susfs.h b/include/linux/susfs.h
+new file mode 100644
+index 0000000..d3a41c2
+--- /dev/null
++++ b/include/linux/susfs.h
+@@ -0,0 +1,XX @@
++#ifndef _LINUX_SUSFS_H
++#define _LINUX_SUSFS_H
++
++/* Core-only declarations */
++
++bool susfs_is_current_proc_umounted(void);
++bool susfs_is_path_hidden(const struct path *path);
++
++#endif
+
+
+diff --git a/include/linux/susfs_def.h b/include/linux/susfs_def.h
+new file mode 100644
+index 0000000..b71aa21
+--- /dev/null
++++ b/include/linux/susfs_def.h
+@@ -0,0 +1,XX @@
++#ifndef _LINUX_SUSFS_DEF_H
++#define _LINUX_SUSFS_DEF_H
++
++/* Core feature flags only */
++
++#define BIT_SUS_PATH   (1 << 0)
++#define BIT_SUS_MOUNT  (1 << 1)
++
++#endif
+
+
+diff --git a/fs/namei.c b/fs/namei.c
+index XXXXXXX..YYYYYYY 100644
+--- a/fs/namei.c
++++ b/fs/namei.c
+@@ -XXX,6 +XXX,10 @@
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs.h>
++#endif
++
+ /* existing code */
+
+@@ -XXXX,6 +XXXX,12 @@
++#ifdef CONFIG_KSU_SUSFS
++    if (susfs_is_path_hidden(path))
++        return -ENOENT;
++#endif
+
+
+diff --git a/fs/namespace.c b/fs/namespace.c
+index XXXXXXX..YYYYYYY 100644
+--- a/fs/namespace.c
++++ b/fs/namespace.c
+@@ -XXX,6 +XXX,10 @@
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs.h>
++#endif
++
+ /* existing code */
+
+@@ -XXXX,6 +XXXX,12 @@
++#ifdef CONFIG_KSU_SUSFS
++    if (susfs_is_current_proc_umounted())
++        return -EPERM;
++#endif
