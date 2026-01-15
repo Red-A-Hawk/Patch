@@ -25,11 +25,11 @@ bbd5aec12b32097a71dc6a0097194a18f3ee9a17 mm/pkeys, powerpc, x86: Provide an empt
 27956d255e3b012372951dd6131e07c106d2daae procfs: add seq_put_hex_ll to speed up /proc/pid/maps
 7f2847d02cdc4491b5ee6d4a0043854cbd6c7a1a proc: add seq_put_decimal_ull_width to speed up /proc/pid/smaps
 
-For KernelSU side patches for this commit you need the sidex15's KernelSU-Next fork:
-https://github.com/sidex15/KernelSU-Next/tree/n3x7g3n-kernel
+For  side patches for this commit you need the sidex15's -Next fork:
+https://github.com/sidex15/-Next/tree/n3x7g3n-kernel
 
-Or if you want to patch on your own here's the commit patch of susfs in the KernelSU-Next:
-https://github.com/sidex15/KernelSU-Next/commit/13b1dfd6e2f1b7b353e774ad8dbc66012450d80f
+Or if you want to patch on your own here's the commit patch of susfs in the -Next:
+https://github.com/sidex15/-Next/commit/13b1dfd6e2f1b7b353e774ad8dbc66012450d80f
 
 Co-authored-by: simonpunk <simonpunk2016@gmail.com>
 Signed-off-by: Pranav Vashi <neobuddy89@gmail.com>
@@ -41,7 +41,6 @@ Signed-off-by: Pranav Vashi <neobuddy89@gmail.com>
  fs/proc/base.c            |   28 +-
  fs/proc/cmdline.c         |   11 +
  fs/proc/fd.c              |   17 +
- fs/proc/task_mmu.c        |   83 ++-
  fs/proc_namespace.c       |   23 +
  fs/readdir.c              |  279 +++++++-
  fs/stat.c                 |   18 +
@@ -834,7 +833,7 @@ index 86550fa19bca..c56b1c39506d 100644
  		retval = do_new_mount(&path, type_page, sb_flags, mnt_flags,
  				      dev_name, data_page);
 +#ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
-+	// For both Legacy and Magic Mount KernelSU
++	// For both Legacy and Magic Mount 
 +	if (!retval && susfs_is_auto_add_sus_ksu_default_mount_enabled &&
 +			(!(flags & (MS_REMOUNT | MS_BIND | MS_SHARED | MS_PRIVATE | MS_SLAVE | MS_UNBINDABLE)))) {
 +		if (susfs_is_current_ksu_domain()) {
@@ -1164,152 +1163,6 @@ index 96fc70225e54..0762169d586c 100644
  
  	show_fd_locks(m, file, files);
  	if (seq_has_overflowed(m))
-diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c
-index 3eaa40f19144..a8fcbb78dde6 100644
---- a/fs/proc/task_mmu.c
-+++ b/fs/proc/task_mmu.c
-@@ -22,12 +22,19 @@
- #include <linux/ctype.h>
- #include <linux/mm_inline.h>
- #include <linux/pkeys.h>
-+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP)
-+#include <linux/susfs_def.h>
-+#endif
- 
- #include <asm/elf.h>
- #include <asm/tlb.h>
- #include <asm/tlbflush.h>
- #include "internal.h"
- 
-+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-+extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
-+#endif
-+
- #define SEQ_PUT_DEC(str, val) \
- 		seq_put_decimal_ull_width(m, str, (val) << (PAGE_SHIFT-10), 8)
- void task_mem(struct seq_file *m, struct mm_struct *mm)
-@@ -356,8 +363,35 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
- 
- 	if (file) {
- 		struct inode *inode = file_inode(vma->vm_file);
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+		if (unlikely(inode->i_mapping->flags & BIT_SUS_MAPS) && susfs_is_current_proc_umounted()) {
-+			seq_setwidth(m, 25 + sizeof(void *) * 6 - 1);
-+			seq_put_hex_ll(m, NULL, vma->vm_start, 8);
-+			seq_put_hex_ll(m, "-", vma->vm_end, 8);
-+			seq_putc(m, ' ');
-+			seq_putc(m, '-');
-+			seq_putc(m, '-');
-+			seq_putc(m, '-');
-+			seq_putc(m, 'p');
-+			seq_put_hex_ll(m, " ", pgoff, 8);
-+			seq_put_hex_ll(m, " ", MAJOR(dev), 2);
-+			seq_put_hex_ll(m, ":", MINOR(dev), 2);
-+			seq_put_decimal_ull(m, " ", ino);
-+			seq_putc(m, ' ');
-+			goto done;
-+		}
-+#endif
-+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-+		if (unlikely(inode->i_mapping->flags & BIT_SUS_KSTAT)) {
-+			susfs_sus_ino_for_show_map_vma(inode->i_ino, &dev, &ino);
-+			goto bypass_orig_flow;
-+		}
-+#endif
- 		dev = inode->i_sb->s_dev;
- 		ino = inode->i_ino;
-+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-+bypass_orig_flow:
-+#endif
- 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
- 	}
- 
-@@ -872,6 +906,25 @@ static int show_smap(struct seq_file *m, void *v)
- 
- 	memset(&mss, 0, sizeof(mss));
- 
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+	if (vma->vm_file &&
-+		unlikely(file_inode(vma->vm_file)->i_mapping->flags & BIT_SUS_MAPS) &&
-+		susfs_is_current_proc_umounted())
-+	{
-+		show_map_vma(m, vma);
-+		SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
-+		SEQ_PUT_DEC(" kB\nKernelPageSize: ", 4);
-+		SEQ_PUT_DEC(" kB\nMMUPageSize:    ", 4);
-+		seq_puts(m, " kB\n");
-+		__show_smap(m, &mss, false);
-+		if (arch_pkeys_enabled())
-+				seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
-+		seq_puts(m, "VmFlags: mr mw me");
-+		seq_putc(m, '\n');
-+		goto bypass_orig_flow;
-+	}
-+#endif
-+
- 	smap_gather_stats(vma, &mss);
- 
- 	show_map_vma(m, vma);
-@@ -892,8 +945,11 @@ static int show_smap(struct seq_file *m, void *v)
- 		seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
- 	show_smap_vma_flags(m, vma);
- 
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+bypass_orig_flow:
-+#endif
- 	m_cache_vma(m, vma);
--
-+	
- 	return 0;
- }
- 
-@@ -922,7 +978,19 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
- 	hold_task_mempolicy(priv);
- 
- 	for (vma = priv->mm->mmap; vma; vma = vma->vm_next) {
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+		if (vma->vm_file &&
-+			unlikely(file_inode(vma->vm_file)->i_mapping->flags & BIT_SUS_MAPS) &&
-+			susfs_is_current_proc_umounted())
-+		{
-+			memset(&mss, 0, sizeof(mss));
-+			goto bypass_orig_flow;
-+		}
-+#endif
- 		smap_gather_stats(vma, &mss);
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+bypass_orig_flow:
-+#endif
- 		last_vma_end = vma->vm_end;
- 	}
- 
-@@ -1568,6 +1636,9 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
- 	unsigned long start_vaddr;
- 	unsigned long end_vaddr;
- 	int ret = 0, copied = 0;
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+	struct vm_area_struct *vma;
-+#endif
- 
- 	if (!mm || !mmget_not_zero(mm))
- 		goto out;
-@@ -1626,6 +1697,16 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
- 		down_read(&mm->mmap_sem);
- 		ret = walk_page_range(start_vaddr, end, &pagemap_walk);
- 		up_read(&mm->mmap_sem);
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+		vma = find_vma(mm, start_vaddr);
-+		if (vma && vma->vm_file) {
-+			struct inode *inode = file_inode(vma->vm_file);
-+			if (unlikely(inode->i_mapping->flags & BIT_SUS_MAPS) && susfs_is_current_proc_umounted()) {
-+				pm.show_pfn = false;
-+				pm.buffer->pme = 0;
-+			}
-+		}
-+#endif
- 		start_vaddr = end;
- 
- 		len = min(count, PM_ENTRY_BYTES * pm.pos);
 diff --git a/fs/proc_namespace.c b/fs/proc_namespace.c
 index b859aaeecb27..5ad5fe7767d5 100644
 --- a/fs/proc_namespace.c
@@ -3789,21 +3642,21 @@ index ab6dd5c9da18..b75c210a889d 100644
  	  Disabling this is mostly only useful for kernel 4.1 and older.
  	  Make sure to implement manual hooks on security/security.c.
  
-+menu "KernelSU - SUSFS"
++menu " - SUSFS"
 +config KSU_SUSFS
-+    bool "KernelSU addon - SUSFS"
++    bool " addon - SUSFS"
 +    depends on KSU
 +    depends on THREAD_INFO_IN_TASK
 +    default y
 +    help
-+      Patch and Enable SUSFS to kernel with KernelSU.
++      Patch and Enable SUSFS to kernel with .
 +
 +config KSU_SUSFS_HAS_MAGIC_MOUNT
-+    bool "Say yes if the current KernelSU repo has magic mount implemented (default y)"
++    bool "Say yes if the current  repo has magic mount implemented (default y)"
 +    depends on KSU_SUSFS
 +    default y
 +    help
-+      - Enable to indicate that the current SUSFS kernel supports the auto hide features for 5ec1cff's Magic Mount KernelSU
++      - Enable to indicate that the current SUSFS kernel supports the auto hide features for 5ec1cff's Magic Mount 
 +      - Every mounts from /debug_ramdisk/workdir will be treated as magic mount and processed differently by susfs
 +
 +config KSU_SUSFS_SUS_PATH
@@ -5747,7 +5600,7 @@ index 8c5f0ad20740..21c507905be2 100644
  # CONFIG_MDM_DBG_REQ_ENG is not set
  
 +#
-+# KernelSU
++# 
 +#
 +CONFIG_KSU=y
 +# CONFIG_KSU_DEBUG is not set
@@ -5755,7 +5608,7 @@ index 8c5f0ad20740..21c507905be2 100644
 +CONFIG_KSU_LSM_SECURITY_HOOKS=y
 +
 +#
-+# KernelSU - SUSFS
++#  - SUSFS
 +#
 +CONFIG_KSU_SUSFS=y
 +CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
