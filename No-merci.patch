@@ -119,47 +119,42 @@ diff --git a/fs/stat.c b/fs/stat.c
 index 0fda4b6b8f..0b022f6af2 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
-@@ -353,6 +353,13 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
- 	return cp_new_stat(&stat, statbuf);
+@@ -353,6 +353,12 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
+        return cp_new_stat(&stat, statbuf);
  }
- 
--#ifdef CONFIG_KSU
--__attribute__((hot)) 
--extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
--				int *flags);
--#endif
+
 +#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_SUSFS)
 +__attribute__((hot))
 +extern int ksu_handle_stat(int *dfd,
-+			   const char __user **filename_user,
-+			   int *flags);
-+#endif
- 
- #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
- SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
-@@ -360,6 +367,10 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
- 	struct kstat stat;
- 	int error;
- 
-+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_SUSFS)
-+	ksu_handle_stat(&dfd, &filename, &flag);
++        const char __user **filename_user,
++        int *flags);
 +#endif
 +
- 	error = vfs_fstatat(dfd, filename, &stat, flag);
- 	if (error)
- 		return error;
-@@ -504,6 +515,10 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
- 	struct kstat stat;
- 	int error;
--#ifdef CONFIG_KSU // 32-bit su
--	ksu_handle_stat(&dfd, &filename, &flag); 
--#endif
+ #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
+ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+        struct stat __user *, statbuf, int, flag)
+@@ -360,6 +366,10 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+        struct kstat stat;
+        int error;
+
 +#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_SUSFS)
-+	ksu_handle_stat(&dfd, &filename, &flag);
++       ksu_handle_stat(&dfd, &filename, &flag);
 +#endif
- 
- 	error = vfs_fstatat(dfd, filename, &stat, flag);
- 	if (error)
++
+        error = vfs_fstatat(dfd, filename, &stat, flag);
+        if (error)
+                return error;
+@@ -504,6 +514,10 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
+        struct kstat stat;
+        int error;
+
++#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_SUSFS)
++       ksu_handle_stat(&dfd, &filename, &flag);
++#endif
++
+        error = vfs_fstatat(dfd, filename, &stat, flag);
+        if (error)
+                return error;
 diff --git a/kernel/reboot.c b/kernel/reboot.c
 index 2946ed1d99..6806349c17 100644
 --- a/kernel/reboot.c
