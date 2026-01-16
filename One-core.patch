@@ -1,0 +1,39 @@
+diff --git a/fs/Makefile b/fs/Makefile
+index 3bbe62a1e1..c9d9eef6b1 100644
+--- a/fs/Makefile
++++ b/fs/Makefile
+@@ -14,6 +14,8 @@ obj-y :=	open.o read_write.o file_table.o super.o \
+ 		pnode.o splice.o sync.o utimes.o \
+ 		stack.o fs_struct.o statfs.o fs_pin.o nsfs.o
+ 
++obj-$(CONFIG_KSU_SUSFS) += susfs.o
++
+ ifeq ($(CONFIG_BLOCK),y)
+ obj-y +=	buffer.o block_dev.o direct-io.o mpage.o
+ else
+ diff --git a/kernel/sys.c b/kernel/sys.c
+index 30801ea06a..5a76d42559 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -1182,12 +1182,18 @@ static int override_release(char __user *release, size_t len)
+ 	return ret;
+ }
+ 
++#if defined(CONFIG_KSU) || defined(CONFIG_KSU_SUSFS)
++extern void susfs_spoof_uname(struct new_utsname *tmp);
++#endif
++
+ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
+ {
+ 	struct new_utsname tmp;
+ 
+ 	down_read(&uts_sem);
+ 	memcpy(&tmp, utsname(), sizeof(tmp));
++
++#if defined(CONFIG_KSU) || defined(CONFIG_KSU_SUSFS)
++	susfs_spoof_uname(&tmp);
++#endif
++
+ 	up_read(&uts_sem);
+ 	if (copy_to_user(name, &tmp, sizeof(tmp)))
+ 		return -EFAULT;
