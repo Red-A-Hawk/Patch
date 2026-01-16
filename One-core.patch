@@ -33,3 +33,5 @@ index 30801ea06a..5a76d42559 100644
 +#endif
  	up_read(&uts_sem);
  	if (copy_to_user(name, &tmp, sizeof(tmp)))
+ 		return -EFAULT;
+  return 0;
