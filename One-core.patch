@@ -19,7 +19,7 @@ index 30801ea06a..5a76d42559 100644
  	return ret;
  }
  
-+#if defined(CONFIG_KSU) || defined(CONFIG_KSU_SUSFS)
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 +extern void susfs_spoof_uname(struct new_utsname *tmp);
 +#endif
 +
@@ -30,7 +30,7 @@ index 30801ea06a..5a76d42559 100644
  	down_read(&uts_sem);
  	memcpy(&tmp, utsname(), sizeof(tmp));
 +
-+#if defined(CONFIG_KSU) || defined(CONFIG_KSU_SUSFS)
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 +	susfs_spoof_uname(&tmp);
 +#endif
 +
