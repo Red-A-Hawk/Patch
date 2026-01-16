@@ -11,7 +11,7 @@ index 3bbe62a1e1..c9d9eef6b1 100644
  ifeq ($(CONFIG_BLOCK),y)
  obj-y +=	buffer.o block_dev.o direct-io.o mpage.o
  else
- diff --git a/kernel/sys.c b/kernel/sys.c
+diff --git a/kernel/sys.c b/kernel/sys.c
 index 30801ea06a..5a76d42559 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
