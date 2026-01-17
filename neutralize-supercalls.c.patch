@@ -1,140 +1,52 @@
 diff --git a/drivers/kernelsu/supercalls.c b/drivers/kernelsu/supercalls.c
-index 0000000..1111111 100644
+index 1a2b3c4..5d6e7f8 100644
 --- a/drivers/kernelsu/supercalls.c
 +++ b/drivers/kernelsu/supercalls.c
-@@ -35,6 +35,10 @@
+@@ -8,6 +8,12 @@
  #include <linux/uaccess.h>
- #include <linux/cred.h>
+ #include <linux/slab.h>
 
 +#ifdef CONFIG_KSU_SUSFS
-+#include <linux/susfs.h>
++#include "susfs.h"
++#include "susfs_def.h"
 +#endif
 +
- /*
-  * magic syscall handler
-  */
+ static long ksu_supercall(unsigned int cmd, unsigned long arg)
+ {
+ 	void __user *uarg = (void __user *)arg;
+@@ -120,6 +126,7 @@ static long ksu_supercall(unsigned int cmd, unsigned long arg)
+ #ifdef CONFIG_KSU_SUSFS
+ 	case KSU_SUSFS_ADD_SUS_PATH:
+-		return susfs_add_sus_path(uarg);
++		return susfs_add_sus_path((struct st_susfs_sus_path __user *)uarg);
 
-@@ -1440,6 +1444,86 @@ int ksu_handle_sys_reboot(int magic1, int magic2,
+ 	case KSU_SUSFS_DEL_SUS_PATH:
+-		return susfs_del_sus_path(uarg);
++		return susfs_del_sus_path((struct st_susfs_sus_path __user *)uarg);
+
+ 	case KSU_SUSFS_ADD_SUS_MOUNT:
+-		return susfs_add_sus_mount(uarg);
++		return susfs_add_sus_mount((struct st_susfs_sus_mount __user *)uarg);
+
+ 	case KSU_SUSFS_DEL_SUS_MOUNT:
+-		return susfs_del_sus_mount(uarg);
++		return susfs_del_sus_mount((struct st_susfs_sus_mount __user *)uarg);
+
+ 	case KSU_SUSFS_ADD_SUS_KSTAT:
+-		return susfs_add_sus_kstat(uarg);
++		return susfs_add_sus_kstat((struct st_susfs_sus_kstat __user *)uarg);
+
+ 	case KSU_SUSFS_DEL_SUS_KSTAT:
+-		return susfs_del_sus_kstat(uarg);
++		return susfs_del_sus_kstat((struct st_susfs_sus_kstat __user *)uarg);
+
+ 	case KSU_SUSFS_SET_I_STATE_EXTERNAL_DIR:
+-		return susfs_set_i_state_on_external_dir(uarg);
++		return susfs_set_i_state_on_external_dir((char __user *)uarg, cmd);
+
+ 	case KSU_SUSFS_CLR_I_STATE_EXTERNAL_DIR:
+-		return susfs_clr_i_state_on_external_dir(uarg);
++		return susfs_clr_i_state_on_external_dir((char __user *)uarg, cmd);
+ #endif
+ 	default:
  		return -EINVAL;
- 	}
-
-+#ifdef CONFIG_KSU_SUSFS
-+	if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
-+
-+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-+		if (cmd == CMD_SUSFS_ADD_SUS_PATH) {
-+			struct st_susfs_sus_path __user *u;
-+			u = (struct st_susfs_sus_path __user *)*arg;
-+			susfs_add_sus_path(u);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_ADD_SUS_PATH_LOOP) {
-+			struct st_susfs_sus_path __user *u;
-+			u = (struct st_susfs_sus_path __user *)*arg;
-+			susfs_add_sus_path_loop(u);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH) {
-+			susfs_set_i_state_on_external_dir(
-+				(char __user *)*arg,
-+				CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH
-+			);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_SET_SDCARD_ROOT_PATH) {
-+			susfs_set_i_state_on_external_dir(
-+				(char __user *)*arg,
-+				CMD_SUSFS_SET_SDCARD_ROOT_PATH
-+			);
-+			return 0;
-+		}
-+#endif /* SUS_PATH */
-+
-+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+		if (cmd == CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS) {
-+			susfs_set_hide_sus_mnts_for_all_procs(*arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-+		if (cmd == CMD_SUSFS_ADD_SUS_KSTAT) {
-+			susfs_add_sus_kstat(*arg);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_UPDATE_SUS_KSTAT) {
-+			susfs_update_sus_kstat(*arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
-+		if (cmd == CMD_SUSFS_ADD_TRY_UMOUNT) {
-+			susfs_add_try_umount(*arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
-+		if (cmd == CMD_SUSFS_SET_UNAME) {
-+			susfs_set_uname(arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
-+		if (cmd == CMD_SUSFS_ENABLE_LOG) {
-+			susfs_enable_log(*arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-+		if (cmd == CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG) {
-+			susfs_set_cmdline_or_bootconfig(arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-+		if (cmd == CMD_SUSFS_ADD_OPEN_REDIRECT) {
-+			susfs_add_open_redirect(*arg);
-+			return 0;
-+		}
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+		if (cmd == CMD_SUSFS_ADD_SUS_MAP) {
-+			susfs_add_sus_map(*arg);
-+			return 0;
-+		}
-+#endif
-+
-+		if (cmd == CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING) {
-+			susfs_set_avc_log_spoofing(*arg);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_SHOW_ENABLED_FEATURES) {
-+			susfs_get_enabled_features(*arg);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_SHOW_VARIANT) {
-+			susfs_show_variant(*arg);
-+			return 0;
-+		}
-+
-+		if (cmd == CMD_SUSFS_SHOW_VERSION) {
-+			susfs_show_version(*arg);
-+			return 0;
-+		}
-+	}
-+#endif /* CONFIG_KSU_SUSFS */
-+
- 	return -EINVAL;
- }
