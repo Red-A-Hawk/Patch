@@ -1,104 +1,31 @@
 diff --git a/drivers/kernelsu/supercalls.c b/drivers/kernelsu/supercalls.c
-index 403cbb1..clean123 100644
+index *_*..*_*
 --- a/drivers/kernelsu/supercalls.c
 +++ b/drivers/kernelsu/supercalls.c
-@@ -900,6 +900,15 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
- {
- 	if (magic1 != KSU_INSTALL_MAGIC1)
- 		return -EINVAL;
-+
-+	/*
-+	 * SUSFS 1.5.12 compatibility:
-+	 * - Do NOT change function signatures
-+	 * - Do NOT cast user pointers
-+	 * - Forward void __user **arg as-is
-+	 */
- 
- 	/* SUSFS commands */
- 	if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
-@@ -907,61 +916,49 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+@@ -927,8 +927,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+ #else
+ static int ksu_handle_sys_reboot(int magic1, int magic2,
+                                  unsigned int cmd,
+-                                 void __user **arg)
+-{
++                                 void __user **arg) {
+     if (magic1 != KSU_INSTALL_MAGIC1)
+         return -EINVAL;
+
+@@ -936,7 +935,7 @@ static int ksu_handle_sys_reboot(int magic1, int magic2,
+     // If magic2 is SUSFS and current process is root
+     if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
  #ifdef CONFIG_KSU_SUSFS_SUS_PATH
- 		if (cmd == CMD_SUSFS_ADD_SUS_PATH) {
--			susfs_add_sus_path(arg);
-+			susfs_add_sus_path(arg);
- 			return 0;
- 		}
- 		if (cmd == CMD_SUSFS_ADD_SUS_PATH_LOOP) {
--			susfs_add_sus_path_loop(arg);
-+			susfs_add_sus_path_loop(arg);
- 			return 0;
- 		}
- 		if (cmd == CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH) {
--			susfs_set_i_state_on_external_dir(arg);
-+			susfs_set_i_state_on_external_dir(arg);
- 			return 0;
- 		}
- 		if (cmd == CMD_SUSFS_SET_SDCARD_ROOT_PATH) {
--			susfs_set_i_state_on_external_dir(arg);
-+			susfs_set_i_state_on_external_dir(arg);
- 			return 0;
- 		}
- #endif
- 
- #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
- 		if (cmd == CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS) {
--			susfs_set_hide_sus_mnts_for_all_procs(arg);
-+			susfs_set_hide_sus_mnts_for_all_procs(arg);
- 			return 0;
- 		}
- #endif
- 
- #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
- 		if (cmd == CMD_SUSFS_ADD_SUS_KSTAT) {
--			susfs_add_sus_kstat(arg);
-+			susfs_add_sus_kstat(arg);
- 			return 0;
- 		}
- 		if (cmd == CMD_SUSFS_UPDATE_SUS_KSTAT) {
--			susfs_update_sus_kstat(arg);
-+			susfs_update_sus_kstat(arg);
- 			return 0;
- 		}
- #endif
- 
- #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
- 		if (cmd == CMD_SUSFS_SET_UNAME) {
--			susfs_set_uname(arg);
-+			susfs_set_uname(arg);
- 			return 0;
- 		}
- #endif
- 
- #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
- 		if (cmd == CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG) {
--			susfs_set_cmdline_or_bootconfig(arg);
-+			susfs_set_cmdline_or_bootconfig(arg);
- 			return 0;
- 		}
- #endif
- 
- #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
- 		if (cmd == CMD_SUSFS_ADD_OPEN_REDIRECT) {
--			susfs_add_open_redirect(arg);
-+			susfs_add_open_redirect(arg);
- 			return 0;
- 		}
- #endif
- 
- #ifdef CONFIG_KSU_SUSFS_SUS_MAP
- 		if (cmd == CMD_SUSFS_ADD_SUS_MAP) {
--			susfs_add_sus_map(arg);
-+			susfs_add_sus_map(arg);
- 			return 0;
- 		}
- #endif
- 		return 0;
- 	}
- 
--	void __user *argp = (void __user *)*arg;
- 	if (magic2 == KSU_INSTALL_MAGIC2)
--		return ksu_handle_fd_request(argp);
-+		return ksu_handle_fd_request((void __user *)*arg);
- 
- 	return 0;
- }
+-        if (cmd == CMD_SUSFS_ADD_SUS_PATH) { susfs_add_sus_path(arg); return 0; }
++        if (cmd == CMD_SUSFS_ADD_SUS_PATH) { susfs_add_sus_path(arg); return 0; }
+         if (cmd == CMD_SUSFS_ADD_SUS_PATH_LOOP) { susfs_add_sus_path_loop(arg); return 0; }
+         if (cmd == CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH) { susfs_set_i_state_on_external_dir(arg); return 0; }
+         if (cmd == CMD_SUSFS_SET_SDCARD_ROOT_PATH) { susfs_set_i_state_on_external_dir(arg); return 0; }
+@@ -996,6 +995,6 @@ static int ksu_handle_sys_reboot(int magic1, int magic2,
+             susfs_set_avc_log_spoofing(arg); return 0; }
+         if (cmd == CMD_SUSFS_SHOW_ENABLED_FEATURES) { susfs_get_enabled_features(arg); return 0; }
+         if (cmd == CMD_SUSFS_SHOW_VARIANT) { susfs_show_variant(arg); return 0; }
+-        if (cmd == CMD_SUSFS_SHOW_VERSION) { susfs_show_version(arg); return 0; }
++        if (cmd == CMD_SUSFS_SHOW_VERSION) { susfs_show_version(arg); return 0; }
+         return 0;
+     }
