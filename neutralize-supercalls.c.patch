@@ -1,69 +1,91 @@
 diff --git a/drivers/kernelsu/supercalls.c b/drivers/kernelsu/supercalls.c
-index 0000000..1111111 100644
+index 9f2c3aa..b1c7e4d 100644
 --- a/drivers/kernelsu/supercalls.c
 +++ b/drivers/kernelsu/supercalls.c
-@@ -286,47 +286,25 @@ static int do_manage_mark(void __user *arg)
- 
- 	switch (cmd.operation) {
- 	case KSU_MARK_GET: {
--#ifndef CONFIG_KSU_SUSFS
- 		ret = ksu_get_task_mark(cmd.pid);
- 		if (ret < 0) {
- 			pr_err("manage_mark: get failed for pid %d: %d\n",
- 			       cmd.pid, ret);
- 			return ret;
- 		}
- 		cmd.result = (u32)ret;
- 		break;
--#else
--        if (susfs_is_current_proc_umounted()) {
--            ret = 0;
--        } else {
--            ret = 1;
--        }
--        pr_info("manage_mark: ret for pid %d: %d\n", cmd.pid, ret);
--        cmd.result = (u32)ret;
--        break;
--#endif
- 	}
- 	case KSU_MARK_MARK: {
--#ifndef CONFIG_KSU_SUSFS
- 		if (cmd.pid == 0) {
- 			ksu_mark_all_process();
- 		} else {
- 			ret = ksu_set_task_mark(cmd.pid, true);
- 			if (ret < 0) {
-@@ -336,12 +314,6 @@ static int do_manage_mark(void __user *arg)
- 			}
- 		}
--#else
--        if (cmd.pid != 0) {
--            return ret;
--        }
--#endif
- 		break;
- 	}
- 	case KSU_MARK_UNMARK: {
--#ifndef CONFIG_KSU_SUSFS
- 		if (cmd.pid == 0) {
- 			ksu_unmark_all_process();
- 		} else {
-@@ -351,12 +323,6 @@ static int do_manage_mark(void __user *arg)
- 			}
- 		}
--#else
--        if (cmd.pid != 0) {
--            return ret;
--        }
--#endif
- 		break;
- 	}
- 	case KSU_MARK_REFRESH: {
--#ifndef CONFIG_KSU_SUSFS
- 		ksu_mark_running_process();
- 		pr_info("manage_mark: refreshed running processes\n");
--#else
--        pr_info("susfs: cmd: KSU_MARK_REFRESH: do nothing\n");
--#endif
- 		break;
- 	}
+@@ -1,6 +1,7 @@
+ #include <linux/kernel.h>
+ #include <linux/syscalls.h>
+ #include <linux/uaccess.h>
++#include <linux/susfs.h>
+
+ #ifdef CONFIG_KSU_SUSFS
+
+@@ -928,12 +929,8 @@ static int do_manage_mark(void __user *arg)
+ {
+-    unsigned int magic2;
+-
+-    if (copy_from_user(&magic2, arg, sizeof(magic2)))
+-        return -EFAULT;
+-
+-    if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
++    if (current_uid().val == 0) {
+         return susfs_add_sus_path(
+-            (void **)arg);
++            (struct st_susfs_sus_path __user *)arg);
+     }
+     return -EPERM;
+ }
+
+@@ -940,7 +937,8 @@ static int do_manage_mark(void __user *arg)
+ static int do_set_i_state(void __user *arg)
+ {
+-    return susfs_set_i_state_on_external_dir(arg);
++    return susfs_set_i_state_on_external_dir(
++        (char __user *)arg, 0);
+ }
+
+ static int do_update_kstat(void __user *arg)
+@@ -948,7 +946,7 @@ static int do_update_kstat(void __user *arg)
+ {
+     return susfs_update_sus_kstat(
+-        (void **)arg);
++        (struct st_susfs_sus_kstat __user *)arg);
+ }
+
+ static int do_add_kstat(void __user *arg)
+@@ -956,7 +954,7 @@ static int do_add_kstat(void __user *arg)
+ {
+     return susfs_add_sus_kstat(
+-        (void **)arg);
++        (struct st_susfs_sus_kstat __user *)arg);
+ }
+
+ static int do_set_uname(void __user *arg)
+@@ -964,7 +962,7 @@ static int do_set_uname(void __user *arg)
+ {
+     return susfs_set_uname(
+-        (void **)arg);
++        (struct st_susfs_uname __user *)arg);
+ }
+
+ static int do_set_cmdline(void __user *arg)
+@@ -972,7 +970,7 @@ static int do_set_cmdline(void __user *arg)
+ {
+     return susfs_set_cmdline_or_bootconfig(
+-        (void **)arg);
++        (char __user *)arg);
+ }
+
+ static int do_add_open_redirect(void __user *arg)
+@@ -980,7 +978,7 @@ static int do_add_open_redirect(void __user *arg)
+ {
+     return susfs_add_open_redirect(
+-        (void **)arg);
++        (struct st_susfs_open_redirect __user *)arg);
+ }
+
+ static int do_add_sus_map(void __user *arg)
+@@ -988,7 +986,7 @@ static int do_add_sus_map(void __user *arg)
+ {
+     return susfs_add_sus_map(
+-        (void **)arg);
++        (struct st_susfs_sus_map __user *)arg);
+ }
+
+ static int do_get_features(void __user *arg)
+ {
+     return susfs_get_enabled_features(
+-        arg);
++        (char __user *)arg, PAGE_SIZE);
+ }
+ #endif
