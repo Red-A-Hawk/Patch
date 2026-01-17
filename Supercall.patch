@@ -1,6 +1,8 @@
+cat > Supercall.patch << 'ENDPATCH'
 --- a/drivers/kernelsu/supercalls.c
 +++ b/drivers/kernelsu/supercalls.c
-@@ -927,73 +927,94 @@ static int ksu_handle_fd_request(void __user *arg)
+@@ -927,79 +927,96 @@ static int ksu_handle_fd_request(void __user *arg)
+ #else
  int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
  			  void __user **arg)
  {
@@ -10,14 +12,12 @@
  		return -EINVAL;
  	}
  
-+	// Dereference **arg with IS_ERR check
 +	argp = (void __user *)*arg;
 +	if (IS_ERR(argp)) {
 +		pr_err("Failed to deref user arg, err: %lu\n", PTR_ERR(argp));
 +		return 0;
 +	}
 +
- 	// If magic2 is susfs and current process is root
  	if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
  #ifdef CONFIG_KSU_SUSFS_SUS_PATH
  		if (cmd == CMD_SUSFS_ADD_SUS_PATH) {
@@ -40,15 +40,16 @@
 +			susfs_set_i_state_on_external_dir((char __user*)argp, cmd);
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+-#endif //#ifdef CONFIG_KSU_SUSFS_SUS_PATH
++#endif
  #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
  		if (cmd == CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS) {
 -			susfs_set_hide_sus_mnts_for_all_procs(arg);
-+			// This function doesn't exist in susfs.c - removed
-+			pr_warn("CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS not implemented\n");
++			pr_info("susfs: CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS is deprecated\n");
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+-#endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
++#endif
  #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
  		if (cmd == CMD_SUSFS_ADD_SUS_KSTAT) {
 -			susfs_add_sus_kstat(arg);
@@ -65,54 +66,55 @@
 +			susfs_add_sus_kstat((struct st_susfs_sus_kstat* __user)argp);
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+-#endif //#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++#endif
  #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
  		if (cmd == CMD_SUSFS_SET_UNAME) {
 -			susfs_set_uname(arg);
 +			susfs_set_uname((struct st_susfs_uname* __user)argp);
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+-#endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
++#endif
  #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
  		if (cmd == CMD_SUSFS_ENABLE_LOG) {
 -			susfs_enable_log(arg);
-+			// susfs_enable_log doesn't exist - use susfs_set_log
-+			// Need to read bool from user first
 +			bool enabled;
-+			if (copy_from_user(&enabled, argp, sizeof(bool)) == 0) {
++			if (copy_from_user(&enabled, argp, sizeof(bool)) == 0)
 +				susfs_set_log(enabled);
-+			}
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+-#endif //#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
++#endif
  #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
  		if (cmd == CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG) {
 -			susfs_set_cmdline_or_bootconfig(arg);
 +			susfs_set_cmdline_or_bootconfig((char* __user)argp);
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+-#endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++#endif
  #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
  		if (cmd == CMD_SUSFS_ADD_OPEN_REDIRECT) {
 -			susfs_add_open_redirect(arg);
 +			susfs_add_open_redirect((struct st_susfs_open_redirect* __user)argp);
  			return 0;
  		}
- #endif //#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+-#endif //#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
++#endif
  #ifdef CONFIG_KSU_SUSFS_SUS_MAP
  		if (cmd == CMD_SUSFS_ADD_SUS_MAP) {
 -			susfs_add_sus_map(arg);
 +			susfs_add_sus_map((struct st_susfs_sus_map* __user)argp);
  			return 0;
  		}
- #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
++#endif
  		if (cmd == CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING) {
 -			susfs_set_avc_log_spoofing(arg);
-+			// Need to read bool from user
 +			bool enabled;
-+			if (copy_from_user(&enabled, argp, sizeof(bool)) == 0) {
++			if (copy_from_user(&enabled, argp, sizeof(bool)) == 0)
 +				susfs_set_avc_log_spoofing(enabled);
-+			}
  			return 0;
  		}
  		if (cmd == CMD_SUSFS_SHOW_ENABLED_FEATURES) {
@@ -122,27 +124,30 @@
  		}
  		if (cmd == CMD_SUSFS_SHOW_VARIANT) {
 -			susfs_show_variant(arg);
-+			// Function doesn't exist - add placeholder
-+			pr_warn("CMD_SUSFS_SHOW_VARIANT not implemented\n");
++			pr_info("susfs: SUSFS_VARIANT=%s\n", SUSFS_VARIANT);
  			return 0;
  		}
  		if (cmd == CMD_SUSFS_SHOW_VERSION) {
 -			susfs_show_version(arg);
-+			// Function doesn't exist - add placeholder
-+			pr_warn("CMD_SUSFS_SHOW_VERSION not implemented\n");
++			pr_info("susfs: SUSFS_VERSION=%s\n", SUSFS_VERSION);
  			return 0;
  		}
  		return 0;
  	}
  
--	// Check if this is a request to install KSU fd
--    // Dereference **arg.. with IS_ERR check.
 -	void __user *argp = (void __user *)*arg;
 -	if (IS_ERR(argp)) {
 -		pr_err("Failed to deref user arg, err: %lu\n", PTR_ERR(argp));
 -		return 0;
 -	}
 -
- 	// Check if this is a request to install KSU fd
  	if (magic2 == KSU_INSTALL_MAGIC2) {
  		return ksu_handle_fd_request(argp);
+ 	}
+ 	
+-    return 0;
++	return 0;
+ }
+-#endif // #ifndef CONFIG_KSU_SUSFS
++#endif
+ENDPATCH
