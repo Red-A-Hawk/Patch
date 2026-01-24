@@ -1,17 +1,3 @@
-From 87e6c1fcbd9c007b6a9e34aafdbebc86fd6590f6 Mon Sep 17 00:00:00 2001
-From: sidex15 <24408329+sidex15@users.noreply.github.com>
-Date: Fri, 28 Nov 2025 09:25:04 +0800
-Subject: [PATCH] fs/kernel: update manual hooks to v1.6
-
----
- drivers/input/input.c |  9 +++++----
- fs/exec.c             | 31 ++++++++++++-------------------
- fs/open.c             | 10 ++++++----
- fs/read_write.c       | 13 +++++++------
- fs/stat.c             | 16 ++++++++++------
- kernel/reboot.c       |  8 ++++++++
- 6 files changed, 48 insertions(+), 39 deletions(-)
-
 diff --git a/drivers/input/input.c b/drivers/input/input.c
 index 5a36dec4e324..329e853e3f07 100644
 --- a/drivers/input/input.c
