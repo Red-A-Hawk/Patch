@@ -1,0 +1,248 @@
+From 87e6c1fcbd9c007b6a9e34aafdbebc86fd6590f6 Mon Sep 17 00:00:00 2001
+From: sidex15 <24408329+sidex15@users.noreply.github.com>
+Date: Fri, 28 Nov 2025 09:25:04 +0800
+Subject: [PATCH] fs/kernel: update manual hooks to v1.6
+
+---
+ drivers/input/input.c |  9 +++++----
+ fs/exec.c             | 31 ++++++++++++-------------------
+ fs/open.c             | 10 ++++++----
+ fs/read_write.c       | 13 +++++++------
+ fs/stat.c             | 16 ++++++++++------
+ kernel/reboot.c       |  8 ++++++++
+ 6 files changed, 48 insertions(+), 39 deletions(-)
+
+diff --git a/drivers/input/input.c b/drivers/input/input.c
+index 5a36dec4e324..329e853e3f07 100644
+--- a/drivers/input/input.c
++++ b/drivers/input/input.c
+@@ -437,10 +437,11 @@ static void input_handle_event(struct input_dev *dev,
+  * axis, etc.
+  */
+ 
+- #ifdef CONFIG_KSU
+- extern bool ksu_input_hook __read_mostly;
+- extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
+- #endif
++#ifdef CONFIG_KSU
++extern bool ksu_input_hook __read_mostly;
++extern __attribute__((cold)) int ksu_handle_input_handle_event(
++			unsigned int *type, unsigned int *code, int *value);
++#endif
+ 
+ void input_event(struct input_dev *dev,
+ 		 unsigned int type, unsigned int code, int value)
+diff --git a/fs/exec.c b/fs/exec.c
+index ce6a78cb578f..1a1312e2ab8a 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1922,12 +1922,21 @@ static int do_execveat_common(int fd, struct filename *filename,
+ 	return retval;
+ }
+ 
++#ifdef CONFIG_KSU
++__attribute__((hot))
++extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
++				void *argv, void *envp, int *flags);
++#endif
++
+ int do_execve(struct filename *filename,
+ 	const char __user *const __user *__argv,
+ 	const char __user *const __user *__envp)
+ {
+ 	struct user_arg_ptr argv = { .ptr.native = __argv };
+ 	struct user_arg_ptr envp = { .ptr.native = __envp };
++#ifdef CONFIG_KSU
++	ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
++#endif
+ 	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+ }
+ 
+@@ -1955,6 +1964,9 @@ static int compat_do_execve(struct filename *filename,
+ 		.is_compat = true,
+ 		.ptr.compat = __envp,
+ 	};
++#ifdef CONFIG_KSU // 32-bit ksud and 32-on-64 support
++	ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
++#endif
+ 	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+ }
+ 
+@@ -2004,26 +2016,11 @@ void set_dumpable(struct mm_struct *mm, int value)
+ 	} while (cmpxchg(&mm->flags, old, new) != old);
+ }
+ 
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+-extern bool ksu_execveat_hook __read_mostly;
+-extern __attribute__((hot, always_inline)) int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
+-			       void *__never_use_argv, void *__never_use_envp,
+-			       int *__never_use_flags);
+-extern int ksu_handle_execve_ksud(const char __user *filename_user,
+-			const char __user *const __user *__argv);
+-#endif
+-
+ SYSCALL_DEFINE3(execve,
+ 		const char __user *, filename,
+ 		const char __user *const __user *, argv,
+ 		const char __user *const __user *, envp)
+ {
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+-	if (unlikely(ksu_execveat_hook))
+-		ksu_handle_execve_ksud(filename, argv);
+-	else
+-		ksu_handle_execve_sucompat((int *)AT_FDCWD, &filename, NULL, NULL, NULL);
+-#endif
+ 	return do_execve(getname(filename), argv, envp);
+ }
+ 
+@@ -2045,10 +2042,6 @@ COMPAT_SYSCALL_DEFINE3(execve, const char __user *, filename,
+ 	const compat_uptr_t __user *, argv,
+ 	const compat_uptr_t __user *, envp)
+ {
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK) // 32-bit su and 32-on-64 support
+-	if (!ksu_execveat_hook)
+-		ksu_handle_execve_sucompat((int *)AT_FDCWD, &filename, NULL, NULL, NULL);
+-#endif
+ 	return compat_do_execve(getname(filename), argv, envp);
+ }
+ 
+diff --git a/fs/open.c b/fs/open.c
+index 8cbbfef49ac6..8fef1f37d825 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -363,9 +363,11 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+ 	}
+ 	return error;
+ }
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+-extern __attribute__((hot, always_inline)) int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+-			                    int *flags);
++
++#ifdef CONFIG_KSU
++__attribute__((hot)) 
++extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
++				int *mode, int *flags);
+ #endif
+ 
+ /*
+@@ -382,7 +384,7 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+ 	struct vfsmount *mnt;
+ 	int res;
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW;
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
++#ifdef CONFIG_KSU
+ 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+ #endif
+ 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 76fe63bbb03f..ad0d4a1e3103 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -568,10 +568,10 @@ static inline void file_pos_write(struct file *file, loff_t pos)
+ 		file->f_pos = pos;
+ }
+ 
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
++#ifdef CONFIG_KSU
+ extern bool ksu_vfs_read_hook __read_mostly;
+-extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
+-			size_t *count_ptr);
++extern __attribute__((cold)) int ksu_handle_sys_read(unsigned int fd,
++				char __user **buf_ptr, size_t *count_ptr);
+ #endif
+ 
+ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+@@ -579,12 +579,13 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+ 	struct fd f = fdget_pos(fd);
+ 	ssize_t ret = -EBADF;
+ 
+-	if (f.file) {
+-		loff_t pos = file_pos_read(f.file);
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
++#ifdef CONFIG_KSU
+ 	if (unlikely(ksu_vfs_read_hook)) 
+ 		ksu_handle_sys_read(fd, &buf, &count);
+ #endif
++
++	if (f.file) {
++		loff_t pos = file_pos_read(f.file);
+ 		ret = vfs_read(f.file, buf, count, &pos);
+ 		if (ret >= 0)
+ 			file_pos_write(f.file, pos);
+diff --git a/fs/stat.c b/fs/stat.c
+index b3a231955e13..ed0bcac6fd8d 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -353,8 +353,10 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
+ 	return cp_new_stat(&stat, statbuf);
+ }
+ 
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+-extern __attribute__((hot, always_inline)) int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#ifdef CONFIG_KSU
++__attribute__((hot)) 
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
++				int *flags);
+ #endif
+ 
+ #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
+@@ -363,7 +365,8 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+ {
+ 	struct kstat stat;
+ 	int error;
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
++
++#ifdef CONFIG_KSU
+ 	ksu_handle_stat(&dfd, &filename, &flag);
+ #endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+@@ -509,6 +512,10 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
+ {
+ 	struct kstat stat;
+ 	int error;
++
++#ifdef CONFIG_KSU // 32-bit su
++	ksu_handle_stat(&dfd, &filename, &flag); 
++#endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
+ 		return error;
+@@ -649,9 +656,6 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
+ 	struct kstat stat;
+ 	int error;
+ 
+-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+-	ksu_handle_stat(&dfd, &filename, &flag);
+-#endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
+ 		return error;
+diff --git a/kernel/reboot.c b/kernel/reboot.c
+index 01df16334a51..ab1e1056a6a7 100644
+--- a/kernel/reboot.c
++++ b/kernel/reboot.c
+@@ -291,6 +291,11 @@ static DEFINE_MUTEX(reboot_mutex);
+  *
+  * reboot doesn't sync: do that yourself before calling this.
+  */
++
++#ifdef CONFIG_KSU
++extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);
++#endif
++
+ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 		void __user *, arg)
+ {
+@@ -298,6 +303,9 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 	char buffer[256];
+ 	int ret = 0;
+ 
++#ifdef CONFIG_KSU 
++	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
++#endif	
+ 	/* We only trust the superuser with rebooting the system. */
+ 	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
+ 		return -EPERM;
+-- 
+2.52.0
+
