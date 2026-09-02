@@ -107,7 +107,7 @@ diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds
 +#define PGO_CLANG_DATA
 +#endif
 
-@@ -949,12 +949,13 @@
+@@ -949,10 +949,11 @@
  	.data : AT(ADDR(.data) - LOAD_OFFSET) {				\
  		INIT_TASK_DATA(inittask)				\
  		NOSAVE_DATA						\
