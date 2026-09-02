@@ -76,7 +76,7 @@ diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
 @@ -220,0 +221,30 @@
-+#ifdef CONFIG_PGO_CLANG
++#if defined(CONFIG_PGO_CLANG) && defined(LINKER_SCRIPT)
 +#define PGO_CLANG_DATA \
 +	__llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) {	\
 +		__llvm_prf_data_start = .;				\
