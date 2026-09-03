@@ -94,10 +94,10 @@ index 0000000..0000000 100644
  obj-y += vdso.o
  extra-y += vdso.lds
 diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
-index 0000000..0000000 100644
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
 @@ -749,6 +749,37 @@
+ #else
  #define BUG_TABLE
  #endif
  
