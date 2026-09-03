@@ -113,12 +113,11 @@ diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds
  		NOSAVE_DATA						\
  		PAGE_ALIGNED_DATA(pagealigned)			\
  		CACHELINE_ALIGNED_DATA(cacheline)			\
- 		READ_MOSTLY_DATA(cacheline)				\
+ 		READ_MOSTLY_DATA(cacheline)			\
  		DATA_DATA						\
  		CONSTRUCTORS						\
  	}								\
--	BUG_TABLE							\
-+	BUG_TABLE							\
+ 	BUG_TABLE							\
 +	PGO_CLANG_DATA
 
 
