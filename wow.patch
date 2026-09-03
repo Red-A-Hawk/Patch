@@ -1,0 +1,884 @@
+diff --git a/Makefile b/Makefile
+index 332702f786a133a5f9f63d0daebdd4d7a64ae098..0d53f0d9ad5e43de5fb8a19bc39313a908dd9dcb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -693,6 +693,9 @@ endif
+ # This allow a user to issue only 'make' to build a kernel including modules
+ # Defaults to vmlinux, but the arch makefile usually adds further targets
+ all: vmlinux
++    
++    CFLAGS_PGO_CLANG := -fprofile-generate
++    export CFLAGS_PGO_CLANG
+ 
+ KBUILD_CFLAGS	+= $(call cc-option,-fno-PIE)
+ KBUILD_AFLAGS	+= $(call cc-option,-fno-PIE)
+@@ -971,6 +974,13 @@ KBUILD_CFLAGS	+= -mllvm -polly-run-dce
+ endif
+ endif
+ 
++    ifdef CONFIG_PGO_CLANG
++    # NOTE: do not enable together with LTO_CLANG / POLLY_CLANG. Instrumented
++    # builds should be compiled with PGO_CLANG alone; re-enable LTO/Polly only
++    # for the final rebuild that consumes the collected .profdata.
++    KBUILD_CFLAGS	+= -mllvm -disable-preinline -fno-if-conversion
++    endif
++   
+ ifdef CONFIG_CFI_CLANG
+ cfi-clang-flags	+= -fsanitize=cfi -fno-sanitize-cfi-canonical-jump-tables \
+ 		   -fno-sanitize-blacklist
+diff --git a/arch/Kconfig b/arch/Kconfig
+index 378741baa1e0a4274761a827cb068bc639fe93a0..abbb3d6d027839cbc14f8a0a74ec782013782e57 100644
+--- a/arch/Kconfig
++++ b/arch/Kconfig
+@@ -1178,3 +1178,4 @@ config ARCH_HAS_NONLEAF_PMD_YOUNG
+ 	  may use this capability to reduce their search space.
+ 
+ source "kernel/gcov/Kconfig"
++source "kernel/pgo/Kconfig"
+diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+index e28830d6002e38006c7ac125305fa69bd37775b5..fcfb67abadcca41c2f627412616ac152884846be 100644
+--- a/arch/arm64/Kconfig
++++ b/arch/arm64/Kconfig
+@@ -44,6 +44,7 @@ config ARM64
+ 	select ARCH_SUPPORTS_MEMORY_FAILURE
+ 	select ARCH_SUPPORTS_LTO_CLANG
+ 	select ARCH_SUPPORTS_THINLTO
++	select ARCH_SUPPORTS_PGO_CLANG
+     select ARCH_SUPPORTS_POLLY_CLANG
+ 	select ARCH_SUPPORTS_SHADOW_CALL_STACK
+ 	select ARCH_SUPPORTS_ATOMIC_RMW
+diff --git a/arch/arm64/configs/vendor/violet-perf_defconfig b/arch/arm64/configs/vendor/violet-perf_defconfig
+index 26fd00aae443e2b3518ab89ccef6661a363a1989..83f6f691cfd3485591981555eb3b74adb73aaa7e 100644
+--- a/arch/arm64/configs/vendor/violet-perf_defconfig
++++ b/arch/arm64/configs/vendor/violet-perf_defconfig
+@@ -5540,7 +5540,7 @@ CONFIG_FRAME_WARN=2048
+ # CONFIG_READABLE_ASM is not set
+ # CONFIG_UNUSED_SYMBOLS is not set
+ # CONFIG_PAGE_OWNER is not set
+-# CONFIG_DEBUG_FS is not set
++CONFIG_DEBUG_FS=y
+ # CONFIG_HEADERS_CHECK is not set
+ # CONFIG_DEBUG_SECTION_MISMATCH is not set
+ CONFIG_SECTION_MISMATCH_WARN_ONLY=y
+diff --git a/arch/arm64/kernel/vdso/Makefile b/arch/arm64/kernel/vdso/Makefile
+index cd3cdd4d46b4d532b796a60a6f65e31f43658c0a..acac32b74a8e6bf688bd8fb706e826a7abb32351 100644
+--- a/arch/arm64/kernel/vdso/Makefile
++++ b/arch/arm64/kernel/vdso/Makefile
+@@ -20,6 +20,7 @@ CFLAGS_REMOVE_vgettimeofday.o += $(CC_FLAGS_SCS)
+ 
+ # Disable gcov profiling for VDSO code
+ GCOV_PROFILE := n
++PGO_PROFILE := n
+ 
+ obj-y += vdso.o
+ extra-y += vdso.lds
+diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
+index 193c1e28e85611b176e673920dd5d3b303f2640e..ff389decdf9216744814df8ce8a0b192a14be7ce 100644
+--- a/include/asm-generic/vmlinux.lds.h
++++ b/include/asm-generic/vmlinux.lds.h
+@@ -742,6 +742,37 @@
+ #ifdef CONFIG_GENERIC_BUG
+ #define BUG_TABLE							\
+ 	. = ALIGN(8);							\
++
++#ifdef CONFIG_PGO_CLANG
++#define PGO_CLANG_DATA \
++  __llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_data_start) = .; \
++    *(__llvm_prf_data) \
++    VMLINUX_SYMBOL(__llvm_prf_data_end) = .; \
++  } \
++  __llvm_prf_cnts : AT(ADDR(__llvm_prf_cnts) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_cnts_start) = .; \
++    *(__llvm_prf_cnts) \
++    VMLINUX_SYMBOL(__llvm_prf_cnts_end) = .; \
++  } \
++  __llvm_prf_names : AT(ADDR(__llvm_prf_names) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_names_start) = .; \
++    *(__llvm_prf_names) \
++    VMLINUX_SYMBOL(__llvm_prf_names_end) = .; \
++  } \
++  __llvm_prf_vals : AT(ADDR(__llvm_prf_vals) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_vals_start) = .; \
++    *(__llvm_prf_vals) \
++    VMLINUX_SYMBOL(__llvm_prf_vals_end) = .; \
++  } \
++  __llvm_prf_vnds : AT(ADDR(__llvm_prf_vnds) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_vnds_start) = .; \
++    *(__llvm_prf_vnds) \
++    VMLINUX_SYMBOL(__llvm_prf_vnds_end) = .; \
++  }
++#else
++#define PGO_CLANG_DATA
++#endif
+ 	__bug_table : AT(ADDR(__bug_table) - LOAD_OFFSET) {		\
+ 		VMLINUX_SYMBOL(__start___bug_table) = .;		\
+ 		KEEP(*(__bug_table))					\
+@@ -958,6 +989,7 @@
+ 		CONSTRUCTORS						\
+ 	}								\
+ 	BUG_TABLE							\
++PGO_CLANG_DATA
+ 
+ #define INIT_TEXT_SECTION(inittext_align)				\
+ 	. = ALIGN(inittext_align);					\
+diff --git a/kernel/Makefile b/kernel/Makefile
+index 110bd9e7008205080ce6672b4f1bd92c3f50ffa6..f2215fe4d2429a4ccbea9499dc478f14f2a2d4cf 100644
+--- a/kernel/Makefile
++++ b/kernel/Makefile
+@@ -104,6 +104,7 @@ obj-$(CONFIG_IRQ_WORK) += irq_work.o
+ obj-$(CONFIG_CPU_PM) += cpu_pm.o
+ obj-$(CONFIG_BPF) += bpf/
+ obj-$(CONFIG_CFI_CLANG) += cfi.o
++obj-$(CONFIG_PGO_CLANG) += pgo/
+ obj-$(CONFIG_SHADOW_CALL_STACK) += scs.o
+ 
+ obj-$(CONFIG_PERF_EVENTS) += events/
+diff --git a/kernel/pgo/Kconfig b/kernel/pgo/Kconfig
+new file mode 100644
+index 0000000000000000000000000000000000000000..ade30c18dc4d555a39eba8727a96931242ed69dc
+--- /dev/null
++++ b/kernel/pgo/Kconfig
+@@ -0,0 +1,35 @@
++# SPDX-License-Identifier: GPL-2.0-only
++menu "Profile Guided Optimization (PGO) (EXPERIMENTAL)"
++
++config ARCH_SUPPORTS_PGO_CLANG
++	bool
++
++config PGO_CLANG
++	bool "Enable clang's PGO-based kernel profiling"
++	depends on DEBUG_FS
++	depends on ARCH_SUPPORTS_PGO_CLANG
++	help
++	  This option enables clang's PGO (Profile Guided Optimization) based
++	  code profiling to better optimize the kernel.
++
++	  If unsure, say N.
++
++	  Run a representative workload for your application on a kernel
++	  compiled with this option and download the raw profile file from
++	  /sys/kernel/debug/pgo/profraw. This file needs to be processed
++	  with llvm-profdata. It may be merged with other collected raw
++	  profiles.
++
++	  Copy the resulting profile file into vmlinux.profdata, and enable
++	  KCFLAGS=-fprofile-use=vmlinux.profdata to produce an optimized
++	  kernel.
++
++	  Note that a kernel compiled with profiling flags will be
++	  significantly larger and run slower. Also be sure to exclude
++	  files from profiling which are not linked to the kernel image
++	  to prevent linker errors.
++
++	  Note that the debugfs filesystem has to be mounted to access
++	  profiling data.
++
++endmenu
+diff --git a/kernel/pgo/Makefile b/kernel/pgo/Makefile
+new file mode 100644
+index 0000000000000000000000000000000000000000..41e27cefd9a47b8fbf744993ff8e10f97f4ff067
+--- /dev/null
++++ b/kernel/pgo/Makefile
+@@ -0,0 +1,5 @@
++# SPDX-License-Identifier: GPL-2.0
++GCOV_PROFILE	:= n
++PGO_PROFILE	:= n
++
++obj-y	+= fs.o instrument.o
+diff --git a/kernel/pgo/fs.c b/kernel/pgo/fs.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..67b0fa15414ab30df04eba26255e4c26d5dbbcc3
+--- /dev/null
++++ b/kernel/pgo/fs.c
+@@ -0,0 +1,350 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2019 Google, Inc.
++ *
++ * Author:
++ *	Sami Tolvanen <samitolvanen@google.com>
++ *
++ * Ported to use debugfs + struct file_operations for compatibility with
++ * kernels predating the procfs proc_ops conversion (Linux < 5.6).
++ */
++
++#define pr_fmt(fmt)	"pgo: " fmt
++
++#include <linux/kernel.h>
++#include <linux/debugfs.h>
++#include <linux/fs.h>
++#include <linux/module.h>
++#include <linux/slab.h>
++#include <linux/vmalloc.h>
++#include "pgo.h"
++
++static struct dentry *directory;
++
++struct prf_private_data {
++	void *buffer;
++	unsigned long size;
++};
++
++static void prf_fill_header(void **buffer)
++{
++	struct llvm_prf_header *header = *(struct llvm_prf_header **)buffer;
++
++#ifdef CONFIG_64BIT
++	header->magic = LLVM_INSTR_PROF_RAW_MAGIC_64;
++#else
++	header->magic = LLVM_INSTR_PROF_RAW_MAGIC_32;
++#endif
++	header->version = LLVM_VARIANT_MASK_IR_PROF | LLVM_INSTR_PROF_RAW_VERSION;
++#if __clang_major__ >= 13
++	header->binary_ids_size = 0;
++#endif
++	header->data_size = prf_data_count();
++	header->padding_bytes_before_counters = 0;
++	header->counters_size = prf_cnts_count();
++	header->padding_bytes_after_counters = 0;
++	header->names_size = prf_names_count();
++#if __clang_major__ >= 14
++	header->counters_delta = (u64)__llvm_prf_cnts_start - (u64)__llvm_prf_data_start;
++#else
++	header->counters_delta = (u64)__llvm_prf_cnts_start;
++#endif
++	header->names_delta = (u64)__llvm_prf_names_start;
++	header->value_kind_last = LLVM_INSTR_PROF_IPVK_LAST;
++
++	*buffer += sizeof(*header);
++}
++
++static void prf_copy_to_buffer(void **buffer, void *src, unsigned long size)
++{
++	memcpy(*buffer, src, size);
++	*buffer += size;
++}
++
++static u32 __prf_get_value_size(struct llvm_prf_data *p, u32 *value_kinds)
++{
++	struct llvm_prf_value_node **nodes =
++		(struct llvm_prf_value_node **)p->values;
++	u32 kinds = 0;
++	u32 size = 0;
++	unsigned int kind;
++	unsigned int n;
++	unsigned int s = 0;
++
++	for (kind = 0; kind < ARRAY_SIZE(p->num_value_sites); kind++) {
++		unsigned int sites = p->num_value_sites[kind];
++
++		if (!sites)
++			continue;
++
++		size += prf_get_value_record_size(sites);
++		kinds++;
++
++		if (!nodes)
++			continue;
++
++		for (n = 0; n < sites; n++) {
++			u32 count = 0;
++			struct llvm_prf_value_node *site = nodes[s + n];
++
++			while (site && ++count <= U8_MAX)
++				site = site->next;
++
++			size += count *
++				sizeof(struct llvm_prf_value_node_data);
++		}
++
++		s += sites;
++	}
++
++	if (size)
++		size += sizeof(struct llvm_prf_value_data);
++
++	if (value_kinds)
++		*value_kinds = kinds;
++
++	return size;
++}
++
++static u32 prf_get_value_size(void)
++{
++	u32 size = 0;
++	struct llvm_prf_data *p;
++
++	for (p = __llvm_prf_data_start; p < __llvm_prf_data_end; p++)
++		size += __prf_get_value_size(p, NULL);
++
++	return size;
++}
++
++static void prf_serialize_value(struct llvm_prf_data *p, void **buffer)
++{
++	struct llvm_prf_value_data header;
++	struct llvm_prf_value_node **nodes =
++		(struct llvm_prf_value_node **)p->values;
++	unsigned int kind;
++	unsigned int n;
++	unsigned int s = 0;
++
++	header.total_size = __prf_get_value_size(p, &header.num_value_kinds);
++
++	if (!header.num_value_kinds)
++		return;
++
++	prf_copy_to_buffer(buffer, &header, sizeof(header));
++
++	for (kind = 0; kind < ARRAY_SIZE(p->num_value_sites); kind++) {
++		struct llvm_prf_value_record *record;
++		u8 *counts;
++		unsigned int sites = p->num_value_sites[kind];
++
++		if (!sites)
++			continue;
++
++		record = *(struct llvm_prf_value_record **)buffer;
++		*buffer += prf_get_value_record_header_size();
++
++		record->kind = kind;
++		record->num_value_sites = sites;
++
++		counts = *(u8 **)buffer;
++		*buffer += prf_get_value_record_site_count_size(sites);
++
++		if (!nodes)
++			continue;
++
++		for (n = 0; n < sites; n++) {
++			u32 count = 0;
++			struct llvm_prf_value_node *site = nodes[s + n];
++
++			while (site && ++count <= U8_MAX) {
++				prf_copy_to_buffer(buffer, site,
++						   sizeof(struct llvm_prf_value_node_data));
++				site = site->next;
++			}
++
++			counts[n] = (u8)count;
++		}
++
++		s += sites;
++	}
++}
++
++static void prf_serialize_values(void **buffer)
++{
++	struct llvm_prf_data *p;
++
++	for (p = __llvm_prf_data_start; p < __llvm_prf_data_end; p++)
++		prf_serialize_value(p, buffer);
++}
++
++static inline unsigned long prf_get_padding(unsigned long size)
++{
++	return 7 & (sizeof(u64) - size % sizeof(u64));
++}
++
++static unsigned long prf_buffer_size(void)
++{
++	return sizeof(struct llvm_prf_header) +
++			prf_data_size()	+
++			prf_cnts_size() +
++			prf_names_size() +
++			prf_get_padding(prf_names_size()) +
++			prf_get_value_size();
++}
++
++static int prf_serialize(struct prf_private_data *p)
++{
++	int err = 0;
++	void *buffer;
++
++	p->size = prf_buffer_size();
++	p->buffer = vzalloc(p->size);
++
++	if (!p->buffer) {
++		err = -ENOMEM;
++		goto out;
++	}
++
++	buffer = p->buffer;
++
++	prf_fill_header(&buffer);
++	prf_copy_to_buffer(&buffer, __llvm_prf_data_start,  prf_data_size());
++	prf_copy_to_buffer(&buffer, __llvm_prf_cnts_start,  prf_cnts_size());
++	prf_copy_to_buffer(&buffer, __llvm_prf_names_start, prf_names_size());
++	buffer += prf_get_padding(prf_names_size());
++
++	prf_serialize_values(&buffer);
++
++out:
++	return err;
++}
++
++static int prf_open(struct inode *inode, struct file *file)
++{
++	struct prf_private_data *data;
++	unsigned long flags;
++	int err;
++
++	data = kzalloc(sizeof(*data), GFP_KERNEL);
++	if (!data) {
++		err = -ENOMEM;
++		goto out;
++	}
++
++	flags = prf_lock();
++
++	err = prf_serialize(data);
++	if (unlikely(err)) {
++		kfree(data);
++		goto out_unlock;
++	}
++
++	file->private_data = data;
++
++out_unlock:
++	prf_unlock(flags);
++out:
++	return err;
++}
++
++static ssize_t prf_read(struct file *file, char __user *buf, size_t count,
++			loff_t *ppos)
++{
++	struct prf_private_data *data = file->private_data;
++
++	if (WARN_ON_ONCE(!data))
++		return -ENOMEM;
++
++	return simple_read_from_buffer(buf, count, ppos, data->buffer,
++				       data->size);
++}
++
++static int prf_release(struct inode *inode, struct file *file)
++{
++	struct prf_private_data *data = file->private_data;
++
++	if (data) {
++		vfree(data->buffer);
++		kfree(data);
++	}
++
++	return 0;
++}
++
++static const struct file_operations prf_fops = {
++	.owner		= THIS_MODULE,
++	.open		= prf_open,
++	.read		= prf_read,
++	.llseek		= default_llseek,
++	.release	= prf_release
++};
++
++static ssize_t reset_write(struct file *file, const char __user *addr,
++			   size_t len, loff_t *pos)
++{
++	struct llvm_prf_data *data;
++
++	memset(__llvm_prf_cnts_start, 0, prf_cnts_size());
++
++	for (data = __llvm_prf_data_start; data < __llvm_prf_data_end; data++) {
++		struct llvm_prf_value_node **vnodes;
++		u64 current_vsite_count;
++		u32 i;
++
++		if (!data->values)
++			continue;
++
++		current_vsite_count = 0;
++		vnodes = (struct llvm_prf_value_node **)data->values;
++
++		for (i = LLVM_INSTR_PROF_IPVK_FIRST; i <= LLVM_INSTR_PROF_IPVK_LAST; i++)
++			current_vsite_count += data->num_value_sites[i];
++
++		for (i = 0; i < current_vsite_count; i++) {
++			struct llvm_prf_value_node *current_vnode = vnodes[i];
++
++			while (current_vnode) {
++				current_vnode->count = 0;
++				current_vnode = current_vnode->next;
++			}
++		}
++	}
++
++	return len;
++}
++
++static const struct file_operations prf_reset_fops = {
++	.owner		= THIS_MODULE,
++	.write		= reset_write,
++	.llseek		= noop_llseek,
++};
++
++static int __init pgo_init(void)
++{
++	directory = debugfs_create_dir("pgo", NULL);
++	if (!directory)
++		goto err_remove;
++
++	if (!debugfs_create_file("profraw", 0600, directory, NULL,
++				 &prf_fops))
++		goto err_remove;
++
++	if (!debugfs_create_file("reset", 0200, directory, NULL,
++				 &prf_reset_fops))
++		goto err_remove;
++
++	return 0;
++
++err_remove:
++	pr_err("initialization failed\n");
++	return -EIO;
++}
++
++static void __exit pgo_exit(void)
++{
++	debugfs_remove_recursive(directory);
++}
++
++module_init(pgo_init);
++module_exit(pgo_exit);
+diff --git a/kernel/pgo/instrument.c b/kernel/pgo/instrument.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2b42ed0e1544a793429332ede288c7d9f13b19b
+--- /dev/null
++++ b/kernel/pgo/instrument.c
+@@ -0,0 +1,141 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2019 Google, Inc.
++ *
++ * Author:
++ *	Sami Tolvanen <samitolvanen@google.com>
++ */
++
++#define pr_fmt(fmt)	"pgo: " fmt
++
++#include <linux/bitops.h>
++#include <linux/kernel.h>
++#include <linux/export.h>
++#include <linux/spinlock.h>
++#include <linux/types.h>
++#include "pgo.h"
++
++static DEFINE_SPINLOCK(pgo_lock);
++static int current_node;
++
++unsigned long prf_lock(void)
++{
++	unsigned long flags;
++
++	spin_lock_irqsave(&pgo_lock, flags);
++
++	return flags;
++}
++
++void prf_unlock(unsigned long flags)
++{
++	spin_unlock_irqrestore(&pgo_lock, flags);
++}
++
++static struct llvm_prf_value_node *allocate_node(struct llvm_prf_data *p,
++						  u32 index, u64 value)
++{
++	if (&__llvm_prf_vnds_start[current_node + 1] >= __llvm_prf_vnds_end)
++		return NULL; /* Out of nodes */
++
++	current_node++;
++
++	return &__llvm_prf_vnds_start[current_node];
++}
++
++void __llvm_profile_instrument_target(u64 target_value, void *data, u32 index)
++{
++	struct llvm_prf_data *p = (struct llvm_prf_data *)data;
++	struct llvm_prf_value_node **counters;
++	struct llvm_prf_value_node *curr;
++	struct llvm_prf_value_node *min = NULL;
++	struct llvm_prf_value_node *prev = NULL;
++	u64 min_count = U64_MAX;
++	u8 values = 0;
++	unsigned long flags;
++
++	if (!p || !p->values)
++		return;
++
++	counters = (struct llvm_prf_value_node **)p->values;
++	curr = counters[index];
++
++	while (curr) {
++		if (target_value == curr->value) {
++			curr->count++;
++			return;
++		}
++
++		if (curr->count < min_count) {
++			min_count = curr->count;
++			min = curr;
++		}
++
++		prev = curr;
++		curr = curr->next;
++		values++;
++	}
++
++	if (values >= LLVM_INSTR_PROF_MAX_NUM_VAL_PER_SITE) {
++		if (!min->count || !(--min->count)) {
++			curr = min;
++			curr->value = target_value;
++			curr->count++;
++		}
++		return;
++	}
++
++	flags = prf_lock();
++
++	curr = allocate_node(p, index, target_value);
++	if (!curr)
++		goto out;
++
++	curr->value = target_value;
++	curr->count++;
++
++	if (!counters[index])
++		counters[index] = curr;
++	else if (prev && !prev->next)
++		prev->next = curr;
++
++out:
++	prf_unlock(flags);
++}
++EXPORT_SYMBOL(__llvm_profile_instrument_target);
++
++void __llvm_profile_instrument_range(u64 target_value, void *data,
++				     u32 index, s64 precise_start,
++				     s64 precise_last, s64 large_value)
++{
++	if (large_value != S64_MIN && (s64)target_value >= large_value)
++		target_value = large_value;
++	else if ((s64)target_value < precise_start ||
++		 (s64)target_value > precise_last)
++		target_value = precise_last + 1;
++
++	__llvm_profile_instrument_target(target_value, data, index);
++}
++EXPORT_SYMBOL(__llvm_profile_instrument_range);
++
++static u64 inst_prof_get_range_rep_value(u64 value)
++{
++	if (value <= 8)
++		return value;
++	else if (value >= 513)
++		return 513;
++	else if (hweight64(value) == 1)
++		return value;
++
++	return ((u64)1 << (64 - __builtin_clzll(value) - 1)) + 1;
++}
++
++void __llvm_profile_instrument_memop(u64 target_value, void *data,
++				     u32 counter_index)
++{
++	u64 rep_value;
++
++	rep_value = inst_prof_get_range_rep_value(target_value);
++	__llvm_profile_instrument_target(rep_value, data, counter_index);
++}
++EXPORT_SYMBOL(__llvm_profile_instrument_memop);
+diff --git a/kernel/pgo/pgo.h b/kernel/pgo/pgo.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c081855e916eb63d71e46207129b64d2b0ab4759
+--- /dev/null
++++ b/kernel/pgo/pgo.h
+@@ -0,0 +1,166 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Copyright (C) 2019 Google, Inc.
++ *
++ * Author:
++ *	Sami Tolvanen <samitolvanen@google.com>
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * GNU General Public License for more details.
++ */
++
++#ifndef _PGO_H
++#define _PGO_H
++
++/*
++ * Note: These internal LLVM definitions must match the compiler version.
++ * See llvm/include/llvm/ProfileData/InstrProfData.inc in LLVM's source code.
++ * Verified compatible with clang 12.0.5 (r416183b, raw profile version 5).
++ */
++
++#define LLVM_INSTR_PROF_RAW_MAGIC_64	\
++		((u64)255 << 56 |	\
++		 (u64)'l' << 48 |	\
++		 (u64)'p' << 40 |	\
++		 (u64)'r' << 32 |	\
++		 (u64)'o' << 24 |	\
++		 (u64)'f' << 16 |	\
++		 (u64)'r' << 8  |	\
++		 (u64)129)
++#define LLVM_INSTR_PROF_RAW_MAGIC_32	\
++		((u64)255 << 56 |	\
++		 (u64)'l' << 48 |	\
++		 (u64)'p' << 40 |	\
++		 (u64)'r' << 32 |	\
++		 (u64)'o' << 24 |	\
++		 (u64)'f' << 16 |	\
++		 (u64)'R' << 8  |	\
++		 (u64)129)
++
++#if __clang_major__ >= 14
++#define LLVM_INSTR_PROF_RAW_VERSION		8
++#elif __clang_major__ == 13
++#define LLVM_INSTR_PROF_RAW_VERSION		7
++#else
++#define LLVM_INSTR_PROF_RAW_VERSION		5
++#endif
++
++#define LLVM_INSTR_PROF_DATA_ALIGNMENT		8
++#define LLVM_INSTR_PROF_IPVK_FIRST		0
++#define LLVM_INSTR_PROF_IPVK_LAST		1
++#define LLVM_INSTR_PROF_MAX_NUM_VAL_PER_SITE	255
++
++#define LLVM_VARIANT_MASK_IR_PROF	(0x1ULL << 56)
++#define LLVM_VARIANT_MASK_CSIR_PROF	(0x1ULL << 57)
++
++struct llvm_prf_header {
++	u64 magic;
++	u64 version;
++#if __clang_major__ >= 13
++	u64 binary_ids_size;
++#endif
++	u64 data_size;
++	u64 padding_bytes_before_counters;
++	u64 counters_size;
++	u64 padding_bytes_after_counters;
++	u64 names_size;
++	u64 counters_delta;
++	u64 names_delta;
++	u64 value_kind_last;
++};
++
++struct llvm_prf_data {
++	const u64 name_ref;
++	const u64 func_hash;
++	const void *counter_ptr;
++	const void *function_ptr;
++	void *values;
++	const u32 num_counters;
++	const u16 num_value_sites[LLVM_INSTR_PROF_IPVK_LAST + 1];
++} __aligned(LLVM_INSTR_PROF_DATA_ALIGNMENT);
++
++struct llvm_prf_value_node_data {
++	u64 value;
++	u64 count;
++};
++
++struct llvm_prf_value_node {
++	u64 value;
++	u64 count;
++	struct llvm_prf_value_node *next;
++};
++
++struct llvm_prf_value_data {
++	u32 total_size;
++	u32 num_value_kinds;
++};
++
++struct llvm_prf_value_record {
++	u32 kind;
++	u32 num_value_sites;
++	u8 site_count_array[];
++};
++
++#define prf_get_value_record_header_size()		\
++	offsetof(struct llvm_prf_value_record, site_count_array)
++#define prf_get_value_record_site_count_size(sites)	\
++	roundup((sites), 8)
++#define prf_get_value_record_size(sites)		\
++	(prf_get_value_record_header_size() +		\
++	 prf_get_value_record_site_count_size((sites)))
++
++/* Data sections */
++extern struct llvm_prf_data __llvm_prf_data_start[];
++extern struct llvm_prf_data __llvm_prf_data_end[];
++
++extern u64 __llvm_prf_cnts_start[];
++extern u64 __llvm_prf_cnts_end[];
++
++extern char __llvm_prf_names_start[];
++extern char __llvm_prf_names_end[];
++
++extern struct llvm_prf_value_node __llvm_prf_vnds_start[];
++extern struct llvm_prf_value_node __llvm_prf_vnds_end[];
++
++/* Locking for vnodes */
++extern unsigned long prf_lock(void);
++extern void prf_unlock(unsigned long flags);
++
++/* Declarations for LLVM instrumentation. */
++void __llvm_profile_instrument_target(u64 target_value, void *data, u32 index);
++void __llvm_profile_instrument_range(u64 target_value, void *data,
++				     u32 index, s64 precise_start,
++				     s64 precise_last, s64 large_value);
++void __llvm_profile_instrument_memop(u64 target_value, void *data,
++				     u32 counter_index);
++
++#define __DEFINE_PRF_SIZE(s) \
++	static inline unsigned long prf_ ## s ## _size(void)		\
++	{								\
++		unsigned long start =					\
++			(unsigned long)__llvm_prf_ ## s ## _start;	\
++		unsigned long end =					\
++			(unsigned long)__llvm_prf_ ## s ## _end;	\
++		return roundup(end - start,				\
++				sizeof(__llvm_prf_ ## s ## _start[0]));	\
++	}								\
++	static inline unsigned long prf_ ## s ## _count(void)		\
++	{								\
++		return prf_ ## s ## _size() /				\
++			sizeof(__llvm_prf_ ## s ## _start[0]);		\
++	}
++
++__DEFINE_PRF_SIZE(data);
++__DEFINE_PRF_SIZE(cnts);
++__DEFINE_PRF_SIZE(names);
++__DEFINE_PRF_SIZE(vnds);
++
++#undef __DEFINE_PRF_SIZE
++
++#endif /* _PGO_H */
+diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
+index 4b7483cb46c7cecc4b7a9d27a9c67098abd8e4c8..5299fb571999e081bc959750b529fbef69e0fe5f 100644
+--- a/scripts/Makefile.lib
++++ b/scripts/Makefile.lib
+@@ -112,6 +112,16 @@ _cpp_flags     = $(KBUILD_CPPFLAGS) $(cppflags-y) $(CPPFLAGS_$(@F))
+ 
+ #
+ # Enable gcov profiling flags for a file, directory or for all files depending
++
++#
++# Enable clang's PGO profiling flags for a file or directory depending on
++# variables PGO_PROFILE_obj.o and PGO_PROFILE.
++#
++ifeq ($(CONFIG_PGO_CLANG),y)
++_c_flags += $(if $(patsubst n%,, \
++  $(PGO_PROFILE_$(basetarget).o)$(PGO_PROFILE)y), \
++  $(CFLAGS_PGO_CLANG))
++endif
+ # on variables GCOV_PROFILE_obj.o, GCOV_PROFILE and CONFIG_GCOV_PROFILE_ALL
+ # (in this order)
+ #
