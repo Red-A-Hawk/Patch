@@ -107,17 +107,17 @@ diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds
 +#define PGO_CLANG_DATA
 +#endif
 
-@@ -949,10 +949,11 @@
+@@ -960,10 +960,11 @@
  	.data : AT(ADDR(.data) - LOAD_OFFSET) {				\
  		INIT_TASK_DATA(inittask)				\
  		NOSAVE_DATA						\
- 		PAGE_ALIGNED_DATA(pagealigned)				\
+ 		PAGE_ALIGNED_DATA(pagealigned)			\
  		CACHELINE_ALIGNED_DATA(cacheline)			\
  		READ_MOSTLY_DATA(cacheline)				\
  		DATA_DATA						\
  		CONSTRUCTORS						\
  	}								\
--	BUG_TABLE
+-	BUG_TABLE							\
 +	BUG_TABLE							\
 +	PGO_CLANG_DATA
 
