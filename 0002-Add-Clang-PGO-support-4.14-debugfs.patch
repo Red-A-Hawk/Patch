@@ -45,7 +45,7 @@ index e28830d6002e38006c7ac125305fa69bd37775b5..e74f09c552739b983e50369e334205a4
  	select ARCH_SUPPORTS_SHADOW_CALL_STACK
  	select ARCH_SUPPORTS_ATOMIC_RMW
 diff --git a/arch/arm64/configs/vendor/violet-perf_defconfig b/arch/arm64/configs/vendor/violet-perf_defconfig
-index 26fd00aae443e2b3518ab89ccef6661a363a1989..83f6f691cfd3485591981555eb3b74adb73aaa7e 100644
+index 6eabb3df0c7050d4acec04ebbf603150ed7bd7f3..f9cf4a9d4b3cf7a10073d66e6d06afda288bd914 100644
 --- a/arch/arm64/configs/vendor/violet-perf_defconfig
 +++ b/arch/arm64/configs/vendor/violet-perf_defconfig
 @@ -5540,7 +5540,7 @@ CONFIG_FRAME_WARN=2048
