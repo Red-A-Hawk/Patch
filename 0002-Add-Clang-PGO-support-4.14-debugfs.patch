@@ -70,14 +70,13 @@ index cd3cdd4d46b4d532b796a60a6f65e31f43658c0a..acac32b74a8e6bf688bd8fb706e826a7
  obj-y += vdso.o
  extra-y += vdso.lds
 diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
-index 193c1e28e85611b176e673920dd5d3b303f2640e..ff389decdf9216744814df8ce8a0b192a14be7ce 100644
+index 193c1e28e85611b176e673920dd5d3b303f2640e..8a2ac512d124a3b808b23dda3919ebc5f6a0af2e 100644
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
-@@ -742,6 +742,37 @@
- #ifdef CONFIG_GENERIC_BUG
- #define BUG_TABLE							\
- 	. = ALIGN(8);							\
-+
+@@ -751,6 +751,37 @@
+ #define BUG_TABLE
+ #endif
+ 
 +#ifdef CONFIG_PGO_CLANG
 +#define PGO_CLANG_DATA \
 +  __llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) { \
@@ -108,9 +107,10 @@ index 193c1e28e85611b176e673920dd5d3b303f2640e..ff389decdf9216744814df8ce8a0b192
 +#else
 +#define PGO_CLANG_DATA
 +#endif
- 	__bug_table : AT(ADDR(__bug_table) - LOAD_OFFSET) {		\
- 		VMLINUX_SYMBOL(__start___bug_table) = .;		\
- 		KEEP(*(__bug_table))					\
++
+ #ifdef CONFIG_UNWINDER_ORC
+ #define ORC_UNWIND_TABLE						\
+ 	. = ALIGN(4);							\
 @@ -958,6 +989,7 @@
  		CONSTRUCTORS						\
  	}								\
