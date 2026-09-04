@@ -72,8 +72,18 @@ diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
 +endif
 
 --- a/include/asm-generic/vmlinux.lds.h
+--- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
-@@ -750,5 +750,36 @@
+@@ -743,12 +743,43 @@
+ #ifdef CONFIG_GENERIC_BUG
+ #define BUG_TABLE							\
+ 	. = ALIGN(8);							\
+ 	__bug_table : AT(ADDR(__bug_table) - LOAD_OFFSET) {		\
+ 		VMLINUX_SYMBOL(__start___bug_table) = .;		\
+ 		KEEP(*(__bug_table))					\
+ 		VMLINUX_SYMBOL(__stop___bug_table) = .;			\
+ 	}
+ #else
  #define BUG_TABLE
  #endif
  
