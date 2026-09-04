@@ -93,11 +93,9 @@ index 0000000..0000000 100644
  
  obj-y += vdso.o
  extra-y += vdso.lds
-diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
-@@ -749,6 +749,37 @@
- #else
+@@ -751,6 +751,37 @@
  #define BUG_TABLE
  #endif
  
@@ -135,8 +133,7 @@ diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds
  #ifdef CONFIG_UNWINDER_ORC
  #define ORC_UNWIND_TABLE						\
  	. = ALIGN(4);							\
-@@ -956,6 +987,7 @@
- 		DATA_DATA						\
+@@ -958,6 +989,7 @@
  		CONSTRUCTORS						\
  	}								\
  	BUG_TABLE							\
@@ -144,6 +141,7 @@ diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds
  
  #define INIT_TEXT_SECTION(inittext_align)				\
  	. = ALIGN(inittext_align);					\
+
 diff --git a/kernel/Makefile b/kernel/Makefile
 index 0000000..0000000 100644
 --- a/kernel/Makefile
