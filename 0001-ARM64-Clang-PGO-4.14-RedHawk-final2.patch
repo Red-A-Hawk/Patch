@@ -71,43 +71,39 @@ diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
 +		$(CFLAGS_PGO_CLANG))
 +endif
 
-
-diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
-diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
-index 193c1e28e85611b176e673920dd5d3b303f2640e..8a2ac512d124a3b808b23dda3919ebc5f6a0af2e 100644
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
-@@ -751,6 +751,37 @@
+@@ -750,5 +750,36 @@
  #define BUG_TABLE
  #endif
  
 +#ifdef CONFIG_PGO_CLANG
-+#define PGO_CLANG_DATA \
-+  __llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) { \
-+    VMLINUX_SYMBOL(__llvm_prf_data_start) = .; \
-+    *(__llvm_prf_data) \
-+    VMLINUX_SYMBOL(__llvm_prf_data_end) = .; \
-+  } \
-+  __llvm_prf_cnts : AT(ADDR(__llvm_prf_cnts) - LOAD_OFFSET) { \
-+    VMLINUX_SYMBOL(__llvm_prf_cnts_start) = .; \
-+    *(__llvm_prf_cnts) \
-+    VMLINUX_SYMBOL(__llvm_prf_cnts_end) = .; \
-+  } \
-+  __llvm_prf_names : AT(ADDR(__llvm_prf_names) - LOAD_OFFSET) { \
-+    VMLINUX_SYMBOL(__llvm_prf_names_start) = .; \
-+    *(__llvm_prf_names) \
-+    VMLINUX_SYMBOL(__llvm_prf_names_end) = .; \
-+  } \
-+  __llvm_prf_vals : AT(ADDR(__llvm_prf_vals) - LOAD_OFFSET) { \
-+    VMLINUX_SYMBOL(__llvm_prf_vals_start) = .; \
-+    *(__llvm_prf_vals) \
-+    VMLINUX_SYMBOL(__llvm_prf_vals_end) = .; \
-+  } \
-+  __llvm_prf_vnds : AT(ADDR(__llvm_prf_vnds) - LOAD_OFFSET) { \
-+    VMLINUX_SYMBOL(__llvm_prf_vnds_start) = .; \
-+    *(__llvm_prf_vnds) \
-+    VMLINUX_SYMBOL(__llvm_prf_vnds_end) = .; \
-+  }
++#define PGO_CLANG_DATA							\
++	__llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) {	\
++		VMLINUX_SYMBOL(__llvm_prf_data_start) = .;		\
++		*(__llvm_prf_data)					\
++		VMLINUX_SYMBOL(__llvm_prf_data_end) = .;		\
++	}								\
++	__llvm_prf_cnts : AT(ADDR(__llvm_prf_cnts) - LOAD_OFFSET) {	\
++		VMLINUX_SYMBOL(__llvm_prf_cnts_start) = .;		\
++		*(__llvm_prf_cnts)					\
++		VMLINUX_SYMBOL(__llvm_prf_cnts_end) = .;		\
++	}								\
++	__llvm_prf_names : AT(ADDR(__llvm_prf_names) - LOAD_OFFSET) {	\
++		VMLINUX_SYMBOL(__llvm_prf_names_start) = .;		\
++		*(__llvm_prf_names)					\
++		VMLINUX_SYMBOL(__llvm_prf_names_end) = .;		\
++	}								\
++	__llvm_prf_vals : AT(ADDR(__llvm_prf_vals) - LOAD_OFFSET) {	\
++		VMLINUX_SYMBOL(__llvm_prf_vals_start) = .;		\
++		*(__llvm_prf_vals)					\
++		VMLINUX_SYMBOL(__llvm_prf_vals_end) = .;		\
++	}								\
++	__llvm_prf_vnds : AT(ADDR(__llvm_prf_vnds) - LOAD_OFFSET) {	\
++		VMLINUX_SYMBOL(__llvm_prf_vnds_start) = .;		\
++		*(__llvm_prf_vnds)					\
++		VMLINUX_SYMBOL(__llvm_prf_vnds_end) = .;		\
++	}
 +#else
 +#define PGO_CLANG_DATA
 +#endif
@@ -119,7 +115,7 @@ index 193c1e28e85611b176e673920dd5d3b303f2640e..8a2ac512d124a3b808b23dda3919ebc5
  		CONSTRUCTORS						\
  	}								\
  	BUG_TABLE							\
-+PGO_CLANG_DATA
++	PGO_CLANG_DATA
  
 diff --git a/kernel/pgo/Kconfig b/kernel/pgo/Kconfig
 new file mode 100644
