@@ -1,119 +1,96 @@
-From 693e1e9cc0813e5201b6fc57c2a0b353318318e4 Mon Sep 17 00:00:00 2001
-From: Peter Jung <admin@ptr1337.dev>
-Date: Wed, 20 Sep 2023 17:15:30 +0200
-Subject: [PATCH] arm64: 4.14 Clang-PGO (Red-A-Hawk port final)
-
-Port Clang PGO support to the Linux 4.14.357-openela ARM64 kernel tree.
-
-This port is adapted to Red-A-Hawk/los_kernel_xiaomi_sm6150 branch 16 and
-Clang 12.0.5 (r416183b). The baseline intentionally leaves
-arch/arm64/Makefile and drivers/firmware/efi/libstub/Makefile unchanged.
-The CC_IS_CLANG dependency from newer trees is omitted because this 4.14 tree
-does not define that Kconfig symbol.
-
-Signed-off-by: Red-A-Hawk <red-a-hawk@users.noreply.github.com>
----
 diff --git a/Makefile b/Makefile
+index 332702f786a133a5f9f63d0daebdd4d7a64ae098..699d1d03befc15357ce83295a691457b2a130821 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -640,0 +641,2 @@
+@@ -971,6 +971,13 @@ KBUILD_CFLAGS	+= -mllvm -polly-run-dce
+ endif
+ endif
+ 
++ifdef CONFIG_PGO_CLANG
++# NOTE: do not enable together with LTO_CLANG / POLLY_CLANG. Instrumented
++# builds should be compiled with PGO_CLANG alone; re-enable LTO/Polly only
++# for the final rebuild that consumes the collected .profdata.
++KBUILD_CFLAGS  += -mllvm -disable-preinline -fno-if-conversion
++endif
++
+ ifdef CONFIG_CFI_CLANG
+ cfi-clang-flags	+= -fsanitize=cfi -fno-sanitize-cfi-canonical-jump-tables \
+ 		   -fno-sanitize-blacklist
+@@ -2023,3 +2030,6 @@ FORCE:
+ # Declare the contents of the .PHONY variable as phony.  We keep that
+ # information in a variable so we can use it in if_changed and friends.
+ .PHONY: $(PHONY)
++
 +CFLAGS_PGO_CLANG := -fprofile-generate
 +export CFLAGS_PGO_CLANG
-
-
 diff --git a/arch/Kconfig b/arch/Kconfig
+index 378741baa1e0a4274761a827cb068bc639fe93a0..abbb3d6d027839cbc14f8a0a74ec782013782e57 100644
 --- a/arch/Kconfig
 +++ b/arch/Kconfig
-@@ -1089,0 +1090,1 @@
+@@ -1178,3 +1178,4 @@ config ARCH_HAS_NONLEAF_PMD_YOUNG
+ 	  may use this capability to reduce their search space.
+ 
+ source "kernel/gcov/Kconfig"
 +source "kernel/pgo/Kconfig"
-
-
 diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+index e28830d6002e38006c7ac125305fa69bd37775b5..e74f09c552739b983e50369e334205a433c9fbe6 100644
 --- a/arch/arm64/Kconfig
 +++ b/arch/arm64/Kconfig
-@@ -41,7 +41,8 @@
-    select ARCH_USE_CMPXCHG_LOCKREF
-    select ARCH_USE_QUEUED_RWLOCKS
-    select ARCH_SUPPORTS_MEMORY_FAILURE
- 	  select ARCH_SUPPORTS_LTO_CLANG
- 	  select ARCH_SUPPORTS_THINLTO
-    select ARCH_SUPPORTS_POLLY_CLANG
-+	  select ARCH_SUPPORTS_PGO_CLANG
- 	  select ARCH_SUPPORTS_SHADOW_CALL_STACK
-
-
+@@ -44,6 +44,7 @@ config ARM64
+ 	select ARCH_SUPPORTS_MEMORY_FAILURE
+ 	select ARCH_SUPPORTS_LTO_CLANG
+ 	select ARCH_SUPPORTS_THINLTO
++  select ARCH_SUPPORTS_PGO_CLANG
+     select ARCH_SUPPORTS_POLLY_CLANG
+ 	select ARCH_SUPPORTS_SHADOW_CALL_STACK
+ 	select ARCH_SUPPORTS_ATOMIC_RMW
 diff --git a/arch/arm64/kernel/vdso/Makefile b/arch/arm64/kernel/vdso/Makefile
+index cd3cdd4d46b4d532b796a60a6f65e31f43658c0a..acac32b74a8e6bf688bd8fb706e826a7abb32351 100644
 --- a/arch/arm64/kernel/vdso/Makefile
 +++ b/arch/arm64/kernel/vdso/Makefile
-@@ -20,0 +21,1 @@
+@@ -20,6 +20,7 @@ CFLAGS_REMOVE_vgettimeofday.o += $(CC_FLAGS_SCS)
+ 
+ # Disable gcov profiling for VDSO code
+ GCOV_PROFILE := n
 +PGO_PROFILE := n
-
-
-diff --git a/kernel/Makefile b/kernel/Makefile
---- a/kernel/Makefile
-+++ b/kernel/Makefile
-@@ -99,0 +100,1 @@
-+obj-$(CONFIG_PGO_CLANG) += pgo/
-
-
-diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
---- a/scripts/Makefile.lib
-+++ b/scripts/Makefile.lib
-@@ -109,0 +110,10 @@
-+
-+#
-+# Enable clang's PGO profiling flags for a file or directory depending on
-+# variables PGO_PROFILE_obj.o and PGO_PROFILE.
-+#
-+ifeq ($(CONFIG_PGO_CLANG),y)
-+_c_flags += $(if $(patsubst n%,, \
-+		$(PGO_PROFILE_$(basetarget).o)$(PGO_PROFILE)y), \
-+		$(CFLAGS_PGO_CLANG))
-+endif
-
---- a/include/asm-generic/vmlinux.lds.h
+ 
+ obj-y += vdso.o
+ extra-y += vdso.lds
+diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
+index 193c1e28e85611b176e673920dd5d3b303f2640e..8a2ac512d124a3b808b23dda3919ebc5f6a0af2e 100644
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
-@@ -743,12 +743,43 @@
- #ifdef CONFIG_GENERIC_BUG
- #define BUG_TABLE							\
- 	. = ALIGN(8);							\
- 	__bug_table : AT(ADDR(__bug_table) - LOAD_OFFSET) {		\
- 		VMLINUX_SYMBOL(__start___bug_table) = .;		\
- 		KEEP(*(__bug_table))					\
- 		VMLINUX_SYMBOL(__stop___bug_table) = .;			\
- 	}
- #else
+@@ -751,6 +751,37 @@
  #define BUG_TABLE
  #endif
  
 +#ifdef CONFIG_PGO_CLANG
-+#define PGO_CLANG_DATA							\
-+	__llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) {	\
-+		VMLINUX_SYMBOL(__llvm_prf_data_start) = .;		\
-+		*(__llvm_prf_data)					\
-+		VMLINUX_SYMBOL(__llvm_prf_data_end) = .;		\
-+	}								\
-+	__llvm_prf_cnts : AT(ADDR(__llvm_prf_cnts) - LOAD_OFFSET) {	\
-+		VMLINUX_SYMBOL(__llvm_prf_cnts_start) = .;		\
-+		*(__llvm_prf_cnts)					\
-+		VMLINUX_SYMBOL(__llvm_prf_cnts_end) = .;		\
-+	}								\
-+	__llvm_prf_names : AT(ADDR(__llvm_prf_names) - LOAD_OFFSET) {	\
-+		VMLINUX_SYMBOL(__llvm_prf_names_start) = .;		\
-+		*(__llvm_prf_names)					\
-+		VMLINUX_SYMBOL(__llvm_prf_names_end) = .;		\
-+	}								\
-+	__llvm_prf_vals : AT(ADDR(__llvm_prf_vals) - LOAD_OFFSET) {	\
-+		VMLINUX_SYMBOL(__llvm_prf_vals_start) = .;		\
-+		*(__llvm_prf_vals)					\
-+		VMLINUX_SYMBOL(__llvm_prf_vals_end) = .;		\
-+	}								\
-+	__llvm_prf_vnds : AT(ADDR(__llvm_prf_vnds) - LOAD_OFFSET) {	\
-+		VMLINUX_SYMBOL(__llvm_prf_vnds_start) = .;		\
-+		*(__llvm_prf_vnds)					\
-+		VMLINUX_SYMBOL(__llvm_prf_vnds_end) = .;		\
-+	}
++#define PGO_CLANG_DATA \
++  __llvm_prf_data : AT(ADDR(__llvm_prf_data) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_data_start) = .; \
++    *(__llvm_prf_data) \
++    VMLINUX_SYMBOL(__llvm_prf_data_end) = .; \
++  } \
++  __llvm_prf_cnts : AT(ADDR(__llvm_prf_cnts) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_cnts_start) = .; \
++    *(__llvm_prf_cnts) \
++    VMLINUX_SYMBOL(__llvm_prf_cnts_end) = .; \
++  } \
++  __llvm_prf_names : AT(ADDR(__llvm_prf_names) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_names_start) = .; \
++    *(__llvm_prf_names) \
++    VMLINUX_SYMBOL(__llvm_prf_names_end) = .; \
++  } \
++  __llvm_prf_vals : AT(ADDR(__llvm_prf_vals) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_vals_start) = .; \
++    *(__llvm_prf_vals) \
++    VMLINUX_SYMBOL(__llvm_prf_vals_end) = .; \
++  } \
++  __llvm_prf_vnds : AT(ADDR(__llvm_prf_vnds) - LOAD_OFFSET) { \
++    VMLINUX_SYMBOL(__llvm_prf_vnds_start) = .; \
++    *(__llvm_prf_vnds) \
++    VMLINUX_SYMBOL(__llvm_prf_vnds_end) = .; \
++  }
 +#else
 +#define PGO_CLANG_DATA
 +#endif
@@ -125,10 +102,25 @@ diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
  		CONSTRUCTORS						\
  	}								\
  	BUG_TABLE							\
-+	PGO_CLANG_DATA
++PGO_CLANG_DATA
  
+ #define INIT_TEXT_SECTION(inittext_align)				\
+ 	. = ALIGN(inittext_align);					\
+diff --git a/kernel/Makefile b/kernel/Makefile
+index 110bd9e7008205080ce6672b4f1bd92c3f50ffa6..f2215fe4d2429a4ccbea9499dc478f14f2a2d4cf 100644
+--- a/kernel/Makefile
++++ b/kernel/Makefile
+@@ -104,6 +104,7 @@ obj-$(CONFIG_IRQ_WORK) += irq_work.o
+ obj-$(CONFIG_CPU_PM) += cpu_pm.o
+ obj-$(CONFIG_BPF) += bpf/
+ obj-$(CONFIG_CFI_CLANG) += cfi.o
++obj-$(CONFIG_PGO_CLANG) += pgo/
+ obj-$(CONFIG_SHADOW_CALL_STACK) += scs.o
+ 
+ obj-$(CONFIG_PERF_EVENTS) += events/
 diff --git a/kernel/pgo/Kconfig b/kernel/pgo/Kconfig
 new file mode 100644
+index 0000000000000000000000000000000000000000..936158f287259406eed2b741376b14a31b129515
 --- /dev/null
 +++ b/kernel/pgo/Kconfig
 @@ -0,0 +1,35 @@
@@ -167,10 +159,9 @@ new file mode 100644
 +	  profiling data.
 +
 +endmenu
-
-
 diff --git a/kernel/pgo/Makefile b/kernel/pgo/Makefile
 new file mode 100644
+index 0000000000000000000000000000000000000000..41e27cefd9a47b8fbf744993ff8e10f97f4ff067
 --- /dev/null
 +++ b/kernel/pgo/Makefile
 @@ -0,0 +1,5 @@
@@ -179,144 +170,9 @@ new file mode 100644
 +PGO_PROFILE	:= n
 +
 +obj-y	+= fs.o instrument.o
-
-
-diff --git a/Documentation/dev-tools/pgo.rst b/Documentation/dev-tools/pgo.rst
-new file mode 100644
---- /dev/null
-+++ b/Documentation/dev-tools/pgo.rst
-@@ -0,0 +1,127 @@
-+.. SPDX-License-Identifier: GPL-2.0
-+
-+===============================
-+Using PGO with the Linux kernel
-+===============================
-+
-+Clang's profiling kernel support (PGO_) enables profiling of the Linux kernel
-+when building with Clang. The profiling data is exported via the ``pgo``
-+procfs directory.
-+
-+.. _PGO: https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization
-+
-+
-+Preparation
-+===========
-+
-+Configure the kernel with:
-+
-+.. code-block:: make
-+
-+   CONFIG_PROC_FS=y
-+   CONFIG_PGO_CLANG=y
-+
-+Note that kernels compiled with profiling flags will be significantly larger
-+and run slower.
-+
-+Profiling data will only become accessible once procfs has been mounted:
-+
-+.. code-block:: sh
-+
-+   mount -t proc proc /proc
-+
-+
-+Customization
-+=============
-+
-+You can enable or disable profiling for individual file and directories by
-+adding a line similar to the following to the respective kernel Makefile:
-+
-+- For a single file (e.g. main.o)
-+
-+  .. code-block:: make
-+
-+     PGO_PROFILE_main.o := y
-+
-+- For all files in one directory
-+
-+  .. code-block:: make
-+
-+     PGO_PROFILE := y
-+
-+To exclude files from being profiled use
-+
-+  .. code-block:: make
-+
-+     PGO_PROFILE_main.o := n
-+
-+and
-+
-+  .. code-block:: make
-+
-+     PGO_PROFILE := n
-+
-+Only files which are linked to the main kernel image or are compiled as kernel
-+modules are supported by this mechanism.
-+
-+
-+Files
-+=====
-+
-+The PGO kernel support creates the following files in procfs:
-+
-+``/proc/pgo``
-+	Parent directory for all PGO-related files.
-+
-+``/proc/pgo/reset``
-+	Global reset file: resets all coverage data to zero when written to.
-+
-+``/proc/pgo/vmlinux.profraw``
-+	The raw PGO data that must be processed with ``llvm_profdata``.
-+
-+
-+Workflow
-+========
-+
-+The PGO kernel can be run on the host or test machines. The data though should
-+be analyzed with Clang's tools from the same Clang version as the kernel was
-+compiled. Clang's tolerant of version skew, but it's easier to use the same
-+Clang version.
-+
-+The profiling data is useful for optimizing the kernel, analyzing coverage,
-+etc. Clang offers tools to perform these tasks.
-+
-+Here is an example workflow for profiling an instrumented kernel with PGO and
-+using the result to optimize the kernel:
-+
-+1) Install the kernel on the TEST machine.
-+
-+2) Reset the data counters right before running the load tests
-+
-+   .. code-block:: sh
-+
-+      $ echo 1 > /proc/pgo/reset
-+
-+3) Run the load tests.
-+
-+4) Collect the raw profile data
-+
-+   .. code-block:: sh
-+
-+      $ cp -a /proc/pgo/vmlinux.profraw /tmp/vmlinux.profraw
-+
-+5) (Optional) Download the raw profile data to the HOST machine.
-+
-+6) Process the raw profile data
-+
-+   .. code-block:: sh
-+
-+      $ llvm-profdata merge --output=vmlinux.profdata vmlinux.profraw
-+
-+   Note that multiple raw profile data files can be merged during this step.
-+
-+7) Rebuild the kernel using the processed profile data (PGO disabled)
-+
-+   .. code-block:: sh
-+
-+      $ make LLVM=1 KCFLAGS=-fprofile-use=vmlinux.profdata ...
-
-
 diff --git a/kernel/pgo/fs.c b/kernel/pgo/fs.c
 new file mode 100644
+index 0000000000000000000000000000000000000000..87ad21e398cb7c1e46739e06592b235be60a6503
 --- /dev/null
 +++ b/kernel/pgo/fs.c
 @@ -0,0 +1,420 @@
@@ -740,10 +596,9 @@ new file mode 100644
 +
 +module_init(pgo_init);
 +module_exit(pgo_exit);
-
-
 diff --git a/kernel/pgo/instrument.c b/kernel/pgo/instrument.c
 new file mode 100644
+index 0000000000000000000000000000000000000000..4c3870c602e0f93ed7afe83d21ff24ca7a7d3874
 --- /dev/null
 +++ b/kernel/pgo/instrument.c
 @@ -0,0 +1,189 @@
@@ -936,10 +791,9 @@ new file mode 100644
 +	__llvm_profile_instrument_target(rep_value, data, counter_index);
 +}
 +EXPORT_SYMBOL(__llvm_profile_instrument_memop);
-
-
 diff --git a/kernel/pgo/pgo.h b/kernel/pgo/pgo.h
 new file mode 100644
+index 0000000000000000000000000000000000000000..ef558bf9e9f32b8771dcd7300d250a0cffdb871c
 --- /dev/null
 +++ b/kernel/pgo/pgo.h
 @@ -0,0 +1,221 @@
@@ -1164,5 +1018,24 @@ new file mode 100644
 +#undef __DEFINE_PRF_SIZE
 +
 +#endif /* _PGO_H */
--- 
-2.42.0
+diff --git a/scripts/Makefile.lib b/scripts/Makefile.lib
+index 4b7483cb46c7cecc4b7a9d27a9c67098abd8e4c8..5299fb571999e081bc959750b529fbef69e0fe5f 100644
+--- a/scripts/Makefile.lib
++++ b/scripts/Makefile.lib
+@@ -112,6 +112,16 @@ _cpp_flags     = $(KBUILD_CPPFLAGS) $(cppflags-y) $(CPPFLAGS_$(@F))
+ 
+ #
+ # Enable gcov profiling flags for a file, directory or for all files depending
++
++#
++# Enable clang's PGO profiling flags for a file or directory depending on
++# variables PGO_PROFILE_obj.o and PGO_PROFILE.
++#
++ifeq ($(CONFIG_PGO_CLANG),y)
++_c_flags += $(if $(patsubst n%,, \
++  $(PGO_PROFILE_$(basetarget).o)$(PGO_PROFILE)y), \
++  $(CFLAGS_PGO_CLANG))
++endif
+ # on variables GCOV_PROFILE_obj.o, GCOV_PROFILE and CONFIG_GCOV_PROFILE_ALL
+ # (in this order)
+ #
